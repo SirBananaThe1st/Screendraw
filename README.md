@@ -1,4 +1,4 @@
-# ScreenDraw 2
+# ScreenDraw
 
 Share your screen (or a single app) with friends, and everyone draws on it together, live.
 
