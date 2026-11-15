@@ -1,12 +1,7 @@
 // Zero-dependency signalling + static file server.
 // Only the WebRTC handshake (offer/answer/ICE) passes through here.
 // Video and drawings travel peer-to-peer once connected.
-//
-// Environment options:
-//   PORT=8080          port to listen on (and to forward on your router)
-//   UPNP=0             don't try to set up port forwarding automatically
-//   PUBLIC_URL=...     the address friends should use, if you know better
-//                      (e.g. a dynamic-DNS name: http://myname.ddns.net:8080)
+
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -16,8 +11,8 @@ const { mapPort } = require('./upnp');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC = path.join(__dirname, 'public');
-const MAX_ROOMS = 200;
-const MAX_PER_ROOM = 20;
+const MAX_ROOMS = Number(process.env.MAX_ROOMS) || 200;
+const MAX_PER_ROOM = Number(process.env.MAX_PER_ROOM) || 20;
 const rooms = new Map(); // room -> Map(id -> member)
 
 const CORS = {
@@ -53,8 +48,8 @@ const time = () => new Date().toLocaleTimeString();
 // stuck in ISP / mobile-carrier proxies that buffer HTTP. Messages stay queued
 // until the client acknowledges them, so a lost response is simply resent.
 
-const POLL_HOLD_MS = 25000;
-const MEMBER_TIMEOUT_MS = 35000;
+const POLL_HOLD_MS = Number(process.env.POLL_HOLD_MS) || 25000;
+const MEMBER_TIMEOUT_MS = Number(process.env.MEMBER_TIMEOUT_MS) || 35000;
 const NO_STORE = { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store, no-transform' };
 
 function json(res, body, status = 200) {

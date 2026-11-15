@@ -1,2 +1,7 @@
+# Dependencies
 node_modules/
 runtime/
+
+# Environment variables
+.env*
+!.env.sample
