@@ -439,7 +439,10 @@
     try {
       stream = await SD.startCapture(settings, sourceId);
     } catch (err) {
-      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') SD.toast(`Couldn't start sharing: ${err.message}`, 'bad');
+      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        SD.toast(`Couldn't start sharing: ${err.message}`, 'bad');
+        log(`share failed: ${err.name}: ${err.message}`);
+      }
       return;
     }
     if (myShare) stopShare(false);

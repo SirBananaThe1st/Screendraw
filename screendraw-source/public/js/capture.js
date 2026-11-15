@@ -102,8 +102,34 @@
       // Windows "everything you hear" uses Chromium's own system-audio capture;
       // every other choice is captured natively and added as a separate track.
       const loopback = sound.mode === 'system' && !!window.desktop.info?.systemAudio;
-      await window.desktop.selectSource(sourceId, loopback);
-      stream = await navigator.mediaDevices.getDisplayMedia({ video, audio: loopback });
+      // Windows' window capture often refuses a request that carries size
+      // limits ("Could not start video source"), so start simple and apply the
+      // limits afterwards. Fall back step by step and report the real reason.
+      const isWindow = String(sourceId).startsWith('window');
+      const fpsOnly = { frameRate: { ideal: fps, max: fps } };
+      const attempts = isWindow
+        ? [{ video: fpsOnly, audio: loopback }, { video: true, audio: loopback }, { video: true, audio: false }]
+        : [{ video, audio: loopback }, { video: fpsOnly, audio: loopback }, { video: true, audio: loopback }, { video: true, audio: false }];
+      let lastErr = null;
+      for (const c of attempts) {
+        try {
+          await window.desktop.selectSource(sourceId, !!c.audio);
+          stream = await navigator.mediaDevices.getDisplayMedia(c);
+          if (loopback && !c.audio) SD.toast('Sound couldn\'t be captured together with this window, so the share has no sound.', 'bad');
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.warn(`[ScreenDraw] capture attempt failed (${JSON.stringify(c)}): ${err.name}: ${err.message}`);
+          if (err.name === 'NotAllowedError' || err.name === 'AbortError') throw err;
+        }
+      }
+      if (!stream) {
+        const e = new Error(isWindow
+          ? 'Windows wouldn\'t let ScreenDraw capture that window. If it\'s minimised, restore it and try again. Some windows can\'t be captured (protected video, games in exclusive fullscreen, apps running as administrator); sharing the entire screen works for those.'
+          : `The screen couldn't be captured (${lastErr?.message || 'unknown error'}).`);
+        e.name = lastErr?.name || 'Error';
+        throw e;
+      }
       if (sound.mode !== 'off' && !loopback) {
         try {
           const native = await SD.startNativeAudio({ ...sound, windowSourceId: sourceId });

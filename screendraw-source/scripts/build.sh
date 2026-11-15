@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the ScreenDraw desktop app from this folder, on Linux (or WSL):
 #   dist/ScreenDraw-Windows-x64.zip      portable folder: unzip, run ScreenDraw.exe (fast start)
-#   dist/ScreenDraw.exe                  single file for Windows (unpacks itself each launch)
+#   dist/ScreenDraw.exe                  single file for Windows (unpacks once on first launch)
 #   dist/ScreenDraw-Linux-x86_64.AppImage  single file for Linux
 #   dist/ScreenDraw-Server.zip           the server + launchers, for whoever hosts
 # Everything is downloaded from official GitHub releases and checksum-verified
@@ -34,19 +34,27 @@ copy_app() { # dest/resources/app  [windows|linux]
   mkdir -p "$1"
   cp package.json "$1/"
   cp -r app public "$1/"
-  rm -rf "$1/app/native"                       # C++ source of the Windows audio helper
-  [ "${2:-}" = windows ] || rm -rf "$1/app/bin" # the helper is Windows-only
+  rm -rf "$1/app/native"                       # C/C++ sources of the Windows helpers
+  rm -f "$1/app/bin/launcher-stub.exe"          # only used to build the single-file exe
+  [ "${2:-}" = windows ] || rm -rf "$1/app/bin" # the audio helper is Windows-only
 }
 
 echo "== ScreenDraw build (Electron $ELECTRON_VERSION)"
 
 # Windows audio helper (per-app / per-device sound). Rebuilt when the llvm-mingw
 # cross-compiler is available (set MINGW_BIN); otherwise the committed app/bin/sdaudio.exe is used.
-if command -v "${MINGW_BIN:+$MINGW_BIN/}x86_64-w64-mingw32-clang++" >/dev/null 2>&1; then
-  echo "-- compiling app/bin/sdaudio.exe"
-  "${MINGW_BIN:+$MINGW_BIN/}x86_64-w64-mingw32-clang++" -std=c++17 -O2 -municode -static -s -o app/bin/sdaudio.exe app/native/sdaudio.cpp -lole32 -luuid -lksuser
+MW="${MINGW_BIN:+$MINGW_BIN/}x86_64-w64-mingw32"
+if command -v "$MW-clang++" >/dev/null 2>&1; then
+  echo "-- compiling app/bin/sdaudio.exe and the single-file launcher"
+  "$MW-clang++" -std=c++17 -O2 -municode -static -s -o app/bin/sdaudio.exe app/native/sdaudio.cpp -lole32 -luuid -lksuser
+  ( cd app/native && "$MW-windres" launcher.rc -O coff -o "$WORK/launcher_res.o" )
+  "$MW-clang" -O2 -municode -mwindows -static -s -Iapp/native/lzma -o app/bin/launcher-stub.exe app/native/launcher.c \
+    app/native/lzma/7zAlloc.c app/native/lzma/7zArcIn.c app/native/lzma/7zBuf.c app/native/lzma/7zBuf2.c app/native/lzma/7zCrc.c \
+    app/native/lzma/7zCrcOpt.c app/native/lzma/7zDec.c app/native/lzma/7zStream.c app/native/lzma/Bcj2.c app/native/lzma/Bra.c \
+    app/native/lzma/Bra86.c app/native/lzma/BraIA64.c app/native/lzma/CpuArch.c app/native/lzma/Delta.c app/native/lzma/Lzma2Dec.c \
+    app/native/lzma/LzmaDec.c "$WORK/launcher_res.o" -lcomctl32 -lshell32 -lole32
 fi
-[ -f app/bin/sdaudio.exe ] || { echo "app/bin/sdaudio.exe is missing"; exit 1; }
+for f in sdaudio.exe launcher-stub.exe; do [ -f "app/bin/$f" ] || { echo "app/bin/$f is missing"; exit 1; }; done
 
 # ---------------------------------------------------------------- Windows
 echo "-- Windows (x64)"
@@ -59,16 +67,21 @@ rm -f "$WIN/resources/default_app.asar"
 find "$WIN/locales" -name '*.pak' ! -name 'en-US.pak' ! -name 'en-GB.pak' -delete
 copy_app "$WIN/resources/app" windows
 
-# Single-file exe: 7-Zip archive + the official 7-Zip self-extractor (7zSD.sfx)
+# Single-file exe: our launcher + 7z archive of the app + trailer. The launcher
+# unpacks once to %LOCALAPPDATA%\ScreenDraw\app\<build-id> and starts from there.
 fetch "https://github.com/ip7z/7zip/releases/download/$SEVENZIP_TAG/7z$SEVENZIP_V-linux-x64.tar.xz" "$CACHE/7z-linux.tar.xz"
-fetch "https://github.com/ip7z/7zip/releases/download/$SEVENZIP_TAG/lzma$SEVENZIP_V.7z" "$CACHE/lzma-sdk.7z"
 mkdir -p "$WORK/7z" && tar -xJf "$CACHE/7z-linux.tar.xz" -C "$WORK/7z"
-"$WORK/7z/7zz" e -y -o"$WORK" "$CACHE/lzma-sdk.7z" bin/7zSD.sfx >/dev/null
 # Portable zip: standard Deflate (opens natively in Windows), maximum effort.
 ( cd "$WORK" && rm -f "$OUT/ScreenDraw-Windows-x64.zip" && "$WORK/7z/7zz" a -tzip -mx=9 -mm=Deflate -mfb=258 -mpass=15 -mmt=on "$OUT/ScreenDraw-Windows-x64.zip" ScreenDraw >/dev/null )
-( cd "$WIN" && "$WORK/7z/7zz" a -t7z -mx=7 -mmt=on "$WORK/app.7z" . >/dev/null )
-printf ';!@Install@!UTF-8!\nTitle="ScreenDraw"\nProgress="yes"\nRunProgram="ScreenDraw.exe"\n;!@InstallEnd@!\n' > "$WORK/sfx.txt"
-cat "$WORK/7zSD.sfx" "$WORK/sfx.txt" "$WORK/app.7z" > "$OUT/ScreenDraw.exe"
+( cd "$WIN" && "$WORK/7z/7zz" a -t7z -m0=LZMA2 -mx=7 -mmt=on "$WORK/app.7z" . >/dev/null )
+python3 - "$ROOT/app/bin/launcher-stub.exe" "$WORK/app.7z" "$OUT/ScreenDraw.exe" <<'PY'
+import hashlib, struct, sys
+stub, arc, out = sys.argv[1:4]
+s = open(stub, 'rb').read(); a = open(arc, 'rb').read()
+build = hashlib.sha256(a).hexdigest()[:16]
+open(out, 'wb').write(s + a + b'SDPAYLD1' + struct.pack('<QQ', len(s), len(a)) + build.encode())
+print(f"  ScreenDraw.exe build {build}")
+PY
 
 # ------------------------------------------------------------------ Linux
 echo "-- Linux (x86_64 AppImage)"

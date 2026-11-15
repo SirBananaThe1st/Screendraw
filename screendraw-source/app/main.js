@@ -67,12 +67,14 @@ app.whenReady().then(() => {
 
   session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
     try {
-      let source = sources.get(selected.id);
-      if (!source) {
-        const list = await desktopCapturer.getSources({ types: ['screen', 'window'] });
-        source = list.find((s) => s.id === selected.id) || list.find((s) => s.id.startsWith('screen'));
-      }
-      if (!source) throw new Error('That screen or window is no longer available.');
+      // Look the source up fresh (windows can change since the picker opened).
+      let source = null;
+      try {
+        const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
+        source = list.find((s) => s.id === selected.id);
+      } catch (err) { log('getSources failed:', err.message); }
+      source = source || sources.get(selected.id);
+      if (!source) throw new Error('That screen or window is no longer available (was it closed?).');
       log(`capturing "${source.name}"${selected.audio && systemAudio ? ' with system audio' : ''}`);
       callback(selected.audio && systemAudio ? { video: source, audio: 'loopback' } : { video: source });
     } catch (err) {
