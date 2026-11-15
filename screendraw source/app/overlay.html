@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" />
+  <title>ScreenDraw overlay</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; }
+    canvas { position: fixed; left: 0; top: 0; }
+    body.draw canvas { cursor: crosshair; }
+    body.draw::after { content: ""; position: fixed; inset: 0; border: 3px solid rgba(91,140,255,.85); pointer-events: none; border-radius: 4px; }
+    #bar {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; align-items: center;
+      background: rgba(18,22,32,.94); color: #e9ecf3; border: 1px solid #2f3850; border-radius: 12px; padding: 6px 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.45); z-index: 2; user-select: none;
+    }
+    body.draw #bar { display: flex; }
+    #bar button { background: #232a3c; color: inherit; border: 1px solid #333c55; border-radius: 8px; padding: 5px 9px; cursor: pointer; font: inherit; }
+    #bar button:hover { background: #2c3550; }
+    #bar button.on { background: #2b3a66; border-color: #5b8cff; }
+    #bar .sw { width: 20px; height: 20px; border-radius: 50%; padding: 0; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); }
+    #bar .sw.active { border-color: #fff; }
+    #bar .hint { color: #8d96ab; margin: 0 4px; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="bar">
+    <span class="hint">✏️ Drawing on your screen</span>
+    <span id="swatches"></span>
+    <button id="fade" title="Vanishing ink">✨ Vanish</button>
+    <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button id="clear" title="Clear everyone's drawings">Clear all</button>
+    <button id="done" title="Back to normal (Esc or Ctrl+Shift+D)">Done</button>
+  </div>
+  <script src="../public/js/core.js"></script>
+  <script src="../public/js/board.js"></script>
+  <script src="../public/js/input.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>
