@@ -4,3 +4,4 @@ runtime/
 
 # Environment variables
 .env*
+!.env.sample
