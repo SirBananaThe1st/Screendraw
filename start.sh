@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 # ================= Settings =================
 export PORT="${PORT:-8080}"          # forward this port (TCP) on your router if it isn't done automatically
-export UPNP="${UPNP:-1}"             # 0 = don't ask the router to forward the port
+export UPNP="${UPNP:-0}"             # 0 = don't ask the router to forward the port
 OPEN_SHARER="${OPEN_SHARER:-1}"      # 0 = only run the server
 # ============================================
 
