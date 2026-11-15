@@ -81,6 +81,7 @@
     }
 
     async onSignal(msg) {
+      if (msg.kind === 'renegotiate') { this.addViewer(msg.from); return; } // viewer pressed Reload
       const v = this.viewers.get(msg.from);
       if (!v) return;
       try {

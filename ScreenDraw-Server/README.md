@@ -1,4 +1,4 @@
-# ScreenDraw 2
+# ScreenDraw v0.2
 
 Share your screen (or a single app) with friends, and everyone draws on it together, live.
 
@@ -81,6 +81,7 @@ Your `.env` stays on your PC. Friends never see it; they only need the address a
 - **Cursors:** everyone's pointer shows on the shared screen with their name. Click your own name at the top to change it.
 - **🔇/🔊 and volume:** turn on the sharer's sound (browsers need a click first).
 - **📶 Quality:** **Auto** (drops to low quality if your connection struggles, and goes back up later), **High** or **Data saver**.
+- **⟳ Reload** (or **R**): reconnects the video if the picture freezes, goes black or gets stuck, without leaving the room.
 - **ⓘ:** shows live stats: route, resolution, fps, bitrate and codec.
 - **While you share from the app:**
   - Drawings appear on your real screen, on top of the shared app or screen, and are hidden from the capture, so viewers don't see them twice.

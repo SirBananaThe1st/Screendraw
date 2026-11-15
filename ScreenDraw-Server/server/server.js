@@ -442,6 +442,10 @@ function handleMessage(m, msg) {
       for (const v of room.members.values()) if (v !== m && v.canBinary && (kind === 'audio' || v.layer === layer)) v.send(cfg);
       return;
     }
+    case 'relay-resync': { // viewer pressed Reload
+      if (!isPresenter && room.presenter?.mode === 'relay') subscribeRelay(room, m, true);
+      return;
+    }
     case 'keyframe-request': {
       if (!isPresenter && room.presenter?.mode === 'relay') { m.needsKey = true; room.requestKey(m.layer); }
       return;

@@ -125,7 +125,7 @@
     const { w, h } = mediaSize();
     const c = SD.contain(r, w, h);
     SD.fitCanvas(boardCanvas, c.x, c.y, c.w, c.h);
-    if (mediaKind === 'relay') SD.fitCanvas(relayCanvas, c.x, c.y, c.w, c.h);
+    if (mediaKind === 'relay') { SD.fitCanvas(relayCanvas, c.x, c.y, c.w, c.h); viewRelay?.redraw(); }
     board.dirty = true;
   }
   new ResizeObserver(layout).observe(stage);
@@ -145,7 +145,7 @@
   function showWaiting(p) {
     showEmpty(`Connecting to ${p.name}'s screen…`, '', p.mode === 'relay' ? 'Video is coming through the server.' : 'Video is coming directly from their computer.');
     emptyTimer = setTimeout(() => {
-      $('#emptyText').textContent = 'This is taking longer than usual. Something on the network may be blocking the video. If it keeps happening, the sharer can try "Through server" mode.';
+      $('#emptyText').textContent = 'This is taking longer than usual. Try ⟳ Reload. If it keeps happening, something on the network may be blocking the video, and the sharer can try "Through server" mode.';
       log('still no video after 15s');
     }, 15000);
   }
@@ -203,6 +203,7 @@
     $('#shareBtn').classList.toggle('hidden', mine);
     $('#stopBtn').classList.toggle('hidden', !mine);
     $('#clearAll').classList.toggle('hidden', !mine);
+    $('#reloadBtn').classList.toggle('hidden', !p);
     $('#presenterBanner').classList.toggle('hidden', !p);
     $('#desktopControls').classList.toggle('hidden', !(mine && SD.isDesktop));
     $('#hidePreviewBox').classList.toggle('hidden', !mine);
@@ -353,6 +354,33 @@
     if (state.quality !== 'auto') conn.send({ type: 'quality', value: state.quality });
   }
 
+  /* ============================================================== reload */
+  // Rebuilds the video connection without leaving the room. Viewers get a fresh
+  // connection (direct) or a fresh setup + full frame (through server); the
+  // sharer refreshes their own preview and sends everyone a full frame.
+  let reloadBusy = false;
+  function reloadStream() {
+    const p = state.presenter;
+    if (!p || reloadBusy) return;
+    reloadBusy = true;
+    $('#reloadBtn').disabled = true;
+    setTimeout(() => { reloadBusy = false; $('#reloadBtn').disabled = false; }, 2500);
+    if (isPresenter()) {
+      if (myShare?.relay) { myShare.relay.requestKey(0); myShare.relay.requestKey(1); }
+      if (!SD.store.get('hidePreview', false) && myShare) { video.srcObject = null; applyPreview(); }
+      layout();
+      log('reloaded own preview');
+      SD.toast('Preview reloaded.');
+      return;
+    }
+    closeViewerMedia();
+    startViewing(p);
+    if (p.mode === 'p2p') conn.send({ type: 'signal', to: p.id, kind: 'renegotiate' });
+    else conn.send({ type: 'relay-resync' });
+    log(`reloaded the stream (${p.mode === 'relay' ? 'through server' : 'direct'})`);
+  }
+  $('#reloadBtn').onclick = reloadStream;
+
   /* ============================================================== sharing */
 
   function resetMyMedia() {
@@ -439,7 +467,10 @@
     try {
       stream = await SD.startCapture(settings, sourceId);
     } catch (err) {
-      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') SD.toast(`Couldn't start sharing: ${err.message}`, 'bad');
+      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        SD.toast(`Couldn't start sharing: ${err.message}`, 'bad');
+        log(`share failed: ${err.name}: ${err.message}`);
+      }
       return;
     }
     if (myShare) stopShare(false);
@@ -734,6 +765,7 @@
     else if (k === 'v') setTool('move');
     else if (k === 'e') $('#fadeBtn').click();
     else if (k === 'f') toggleFs();
+    else if (k === 'r') reloadStream();
   });
 
   // Handy for troubleshooting from the browser console.

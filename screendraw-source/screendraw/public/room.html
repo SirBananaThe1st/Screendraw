@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src * ws: wss: http: https:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'" />
+  <title>ScreenDraw</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="roomtag" title="Room code">
+        <span class="muted small">Room</span><span class="code" id="roomCode"></span>
+        <button class="ghost small" id="copyInvite" title="Copy a link friends can open in their browser">Copy invite</button>
+      </div>
+      <div class="members" id="members"></div>
+      <div class="spacer"></div>
+      <span class="status warn" id="status">Connecting…</span>
+      <button class="primary" id="shareBtn" title="Share your screen or an app with the room">🖥 Share screen</button>
+      <button class="danger hidden" id="stopBtn">Stop sharing</button>
+      <div class="sep"></div>
+      <button id="soundBtn" title="Sound from the shared screen">🔇</button>
+      <input type="range" id="volume" min="0" max="1" step="0.05" value="1" title="Volume" />
+      <select id="quality" title="Video quality you receive" style="width:auto">
+        <option value="auto">📶 Auto</option>
+        <option value="high">📶 High</option>
+        <option value="low">📶 Data saver</option>
+      </select>
+      <button class="hidden" id="reloadBtn" title="Reload the video (fixes a frozen, black or stuck picture) (R)">⟳ Reload</button>
+      <button class="ghost" id="statsBtn" title="Connection stats">ⓘ</button>
+      <button class="ghost" id="fullscreenBtn" title="Fullscreen (F)">⛶</button>
+      <button class="ghost" id="leaveBtn" title="Leave room">Leave</button>
+    </header>
+
+    <div class="banner hidden" id="presenterBanner">
+      <span class="live">LIVE</span>
+      <span id="presenterText"></span>
+      <div class="spacer"></div>
+      <span id="desktopControls" class="group hidden">
+        <button id="drawMine" title="Draw directly on your own screen (Ctrl+Shift+D)">✏️ Draw on my screen</button>
+        <label class="group small"><input type="checkbox" id="showOverlay" checked /> Show drawings on my screen</label>
+      </span>
+      <label class="group small hidden" id="hidePreviewBox" title="Stops showing your own share inside ScreenDraw to save CPU/GPU. Viewers aren't affected."><input type="checkbox" id="hidePreview" /> Hide my preview</label>
+    </div>
+
+    <div class="toolbar" id="tools">
+      <div class="group">
+        <button id="toolPen" class="on" title="Pen (P)">✏️ Pen</button>
+        <button id="toolMove" title="Move / resize stickers (V)">✋ Move</button>
+      </div>
+      <div class="sep"></div>
+      <div class="group" id="swatches"></div>
+      <input type="color" id="customColor" title="Custom colour" />
+      <span class="penpreview" id="penPreview"></span>
+      <input type="range" id="penSize" min="1" max="16" step="1" title="Pen size ([ and ])" />
+      <div class="sep"></div>
+      <button id="fadeBtn" title="Vanishing ink: strokes disappear shortly after you draw them (E)">✨ Vanish</button>
+      <select id="fadeTime" title="How long vanishing ink stays" style="width:auto">
+        <option value="1500">1.5 s</option><option value="3000" selected>3 s</option><option value="6000">6 s</option><option value="10000">10 s</option>
+      </select>
+      <div class="sep"></div>
+      <button id="stickerBtn" title="Add an image sticker (or paste / drop an image)">🖼 Sticker</button>
+      <button id="deleteSticker" class="hidden" title="Delete the selected sticker (Delete)">🗑 Delete</button>
+      <input type="file" id="stickerFile" accept="image/*" class="hidden" />
+      <div class="sep"></div>
+      <button id="undoBtn" title="Undo your last stroke (Ctrl+Z)">↶ Undo</button>
+      <button id="clearMine" class="danger" title="Remove your drawings and stickers">Clear mine</button>
+      <button id="clearAll" class="danger hidden" title="Remove everyone's drawings (you're sharing)">Clear all</button>
+    </div>
+
+    <main class="stage" id="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="relayCanvas" class="hidden"></canvas>
+      <canvas id="board"></canvas>
+      <div class="empty" id="empty"><div class="box"><h2 id="emptyTitle">Connecting…</h2><div id="emptyText"></div><div class="step" id="emptyStep"></div></div></div>
+      <div class="stats hidden" id="stats"></div>
+    </main>
+  </div>
+
+  <!-- Share dialog -->
+  <dialog id="shareDialog">
+    <form method="dialog">
+      <div class="head"><h2>Share with the room</h2><button class="ghost" value="cancel">✕</button></div>
+      <div class="body">
+        <div id="takeoverNote" class="callout hidden"></div>
+        <div id="sourcePicker" class="hidden">
+          <div class="tabs">
+            <button type="button" class="on" data-kind="screen">Entire screen</button>
+            <button type="button" data-kind="window">Application window</button>
+            <span class="spacer"></span>
+            <button type="button" class="ghost" id="refreshSources">↻ Refresh</button>
+          </div>
+          <div class="sources" id="sources"></div>
+        </div>
+        <p id="browserPickerNote" class="muted hidden">After you click <b>Start sharing</b>, your browser asks which screen, window or tab to share.</p>
+
+        <div class="settings">
+          <div>
+            <label class="field">Send video</label>
+            <div class="radio" id="modeRadio">
+              <label title="Straight from your computer to each viewer"><input type="radio" name="mode" value="p2p" />Direct (P2P)</label>
+              <label title="Uploaded once to the server, which sends it to everyone"><input type="radio" name="mode" value="relay" />Through server</label>
+            </div>
+            <div class="muted small" id="modeHint" style="margin-top:6px"></div>
+          </div>
+          <div>
+            <label class="field">Optimise for</label>
+            <div class="radio">
+              <label><input type="radio" name="optimize" value="detail" />Text &amp; detail</label>
+              <label><input type="radio" name="optimize" value="motion" />Motion &amp; video</label>
+            </div>
+          </div>
+          <div>
+            <label class="field" for="resSelect">Max resolution</label>
+            <select id="resSelect"></select>
+          </div>
+          <div>
+            <label class="field" for="fpsSelect">Frame rate</label>
+            <select id="fpsSelect"></select>
+          </div>
+        </div>
+        <label class="check" id="soundBrowser"><input type="checkbox" id="audioCheck" /> <span id="audioLabel">Share sound</span></label>
+        <div id="soundDesktop" class="hidden">
+          <label class="field" for="soundMode">Sound</label>
+          <div class="row">
+            <select id="soundMode" class="grow">
+              <option value="off">No sound</option>
+              <option value="window">Only the shared app</option>
+              <option value="system">Everything you hear</option>
+              <option value="except">Everything except these apps…</option>
+              <option value="apps">Only these apps…</option>
+              <option value="devices">Only these output devices…</option>
+            </select>
+            <button type="button" class="ghost" id="refreshSound" title="Refresh the list of apps and devices">↻</button>
+          </div>
+          <div class="picklist hidden" id="soundPick"></div>
+          <div class="muted small" id="soundNote" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="muted small" id="shareError" style="margin-right:auto;color:#ff9aa4"></span>
+        <button value="cancel">Cancel</button>
+        <button class="primary" value="start" id="startShare">Start sharing</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Your name and cursor colour -->
+  <dialog id="profileDialog" style="width:min(380px,94vw)">
+    <form method="dialog">
+      <div class="head"><h2>You</h2><button class="ghost" value="cancel">✕</button></div>
+      <div class="body">
+        <label class="field" for="profileName">Name</label>
+        <input id="profileName" type="text" maxlength="24" />
+        <label class="field">Cursor colour</label>
+        <div class="colorgrid" id="profileColors"></div>
+        <div class="row" style="margin-top:8px"><span class="muted small">Custom:</span><input type="color" id="profileCustom" /></div>
+      </div>
+      <div class="foot"><button value="cancel">Cancel</button><button class="primary" value="save">Save</button></div>
+    </form>
+  </dialog>
+
+  <script src="js/core.js"></script>
+  <script src="js/transport.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/capture.js"></script>
+  <script src="js/p2p.js"></script>
+  <script src="js/relay.js"></script>
+  <script src="js/room.js"></script>
+</body>
+</html>
