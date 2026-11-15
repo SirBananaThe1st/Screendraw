@@ -25,7 +25,7 @@ function setState(s, text) {
   if (s !== 'offline') lastState = s;
   const [cls, label] = STATES[s] || ['', s];
   statusEl.className = `status ${cls}`;
-  statusEl.textContent = text || label;
+  statusEl.textContent = s === 'failed' ? label : text || label;
   if (text && s === 'failed') emptyMsg.textContent = text;
   else if (EMPTY[s]) emptyMsg.textContent = EMPTY[s];
   clearTimeout(slowTimer);
@@ -43,6 +43,14 @@ const viewer = createViewer({
   onStream: (stream) => {
     video.srcObject = stream;
     empty.classList.toggle('hidden', !!stream);
+    if (!stream) return;
+    // Some browsers block autoplay; if so, start the video on the next click.
+    video.play().catch((err) => {
+      sig.log(`browser blocked video playback: ${err.message}`);
+      emptyMsg.textContent = 'Click anywhere to start the video.';
+      empty.classList.remove('hidden');
+      document.addEventListener('pointerdown', () => video.play().then(() => empty.classList.add('hidden')).catch(() => {}), { once: true });
+    });
   },
 });
 
@@ -50,7 +58,8 @@ sig.on('log', (text) => ($('#step').textContent = `Last step: ${text}`));
 sig.on('error', ({ message }) => setState('failed', message));
 sig.on('disconnected', () => setState('offline'));
 sig.on('reconnected', () => setState(lastState));
-sig.connect();
+if (webrtcSupported()) sig.connect();
+else setState('failed', WEBRTC_MISSING);
 document.title = `ScreenDraw — room ${room}`;
 
 trackVideoRect(video, stage, canvas, board);

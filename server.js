@@ -1,7 +1,12 @@
 // Zero-dependency signalling + static file server.
 // Only the WebRTC handshake (offer/answer/ICE) passes through here.
 // Video and drawings travel peer-to-peer once connected.
-
+//
+// Environment options:
+//   PORT=8080          port to listen on (and to forward on your router)
+//   UPNP=0             don't try to set up port forwarding automatically
+//   PUBLIC_URL=...     the address friends should use, if you know better
+//                      (e.g. a dynamic-DNS name: http://myname.ddns.net:8080)
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -11,8 +16,8 @@ const { mapPort } = require('./upnp');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC = path.join(__dirname, 'public');
-const MAX_ROOMS = Number(process.env.MAX_ROOMS) || 200;
-const MAX_PER_ROOM = Number(process.env.MAX_PER_ROOM) || 20;
+const MAX_ROOMS = 200;
+const MAX_PER_ROOM = 20;
 const rooms = new Map(); // room -> Map(id -> member)
 
 const CORS = {
@@ -48,8 +53,8 @@ const time = () => new Date().toLocaleTimeString();
 // stuck in ISP / mobile-carrier proxies that buffer HTTP. Messages stay queued
 // until the client acknowledges them, so a lost response is simply resent.
 
-const POLL_HOLD_MS = Number(process.env.POLL_HOLD_MS) || 25000;
-const MEMBER_TIMEOUT_MS = Number(process.env.MEMBER_TIMEOUT_MS) || 35000;
+const POLL_HOLD_MS = 25000;
+const MEMBER_TIMEOUT_MS = 35000;
 const NO_STORE = { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store, no-transform' };
 
 function json(res, body, status = 200) {
@@ -70,15 +75,20 @@ function flush(member) {
   json(res, { epoch: member.epoch, messages: member.queue });
 }
 
-function join(room, id, role) {
+function join(room, id, role, key) {
   if (!rooms.has(room) && rooms.size >= MAX_ROOMS) return { error: 'The server is busy. Try again later.' };
   if (!rooms.has(room)) rooms.set(room, new Map());
   const members = rooms.get(room);
   const sharer = [...members.values()].find((m) => m.role === 'sharer');
-  if (role === 'sharer' && sharer) return { error: 'This room already has someone sharing.' };
+  if (role === 'sharer' && sharer) {
+    // The same computer (same private key) restarting takes the room back over;
+    // anyone else is refused.
+    if (!key || sharer.key !== key) return { error: 'Someone else is already sharing in this room.' };
+    leave(sharer);
+  }
   if (members.size >= MAX_PER_ROOM) return { error: 'This room is full.' };
 
-  const member = { id, role, room, queue: [], seq: 0, epoch: Math.random().toString(36).slice(2), waiter: null, lastSeen: Date.now() };
+  const member = { id, role, room, key: role === 'sharer' ? key || null : null, queue: [], seq: 0, epoch: Math.random().toString(36).slice(2), waiter: null, lastSeen: Date.now() };
   members.set(id, member);
   deliver(member, { type: 'welcome', id, sharer: role === 'sharer' ? id : sharer?.id ?? null });
 
@@ -125,7 +135,8 @@ function poll(req, res, url) {
   let after = Number(url.searchParams.get('after')) || 0;
   if (!member || member.epoch !== url.searchParams.get('epoch')) after = 0; // new session: send everything
   if (!member) {
-    member = join(room, id, role);
+    const key = url.searchParams.get('key') || '';
+    member = join(room, id, role, VALID.test(key) ? key : '');
     if (member.error) return json(res, { epoch: null, messages: [{ type: 'error', message: member.error, seq: 1 }] });
   }
 

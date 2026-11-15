@@ -7,10 +7,13 @@ rem ================= Settings =================
 rem Port to host on. Forward this port (TCP) on your router if it isn't done automatically.
 set "PORT=8080"
 rem Set to 0 to stop ScreenDraw from asking your router to forward the port (UPnP).
-set "UPNP=0"
+set "UPNP=1"
 rem Set to 0 to only run the server (no sharer app window).
 set "OPEN_SHARER=1"
 rem ============================================
+
+rem Version of the Electron runtime used by the desktop sharer app.
+set "ELECTRON_VERSION=33.4.11"
 
 set "SCREENDRAW_SERVER=http://localhost:%PORT%"
 set "NODE_DIR=%~dp0runtime\node"
@@ -42,21 +45,39 @@ exit /b 1
 set "PATH=%NODE_DIR%;%PATH%"
 echo  Using bundled Node.js
 
-rem --- 2. The desktop sharer app (Electron), which draws the overlay on your screen
+rem --- 2. The desktop sharer app, which draws the overlay on your screen
 :deps
 if "%OPEN_SHARER%"=="0" goto server
-if exist "node_modules\electron\dist\electron.exe" goto open_app
-echo  Installing the sharer app (one time only, about 100 MB)...
-call npm install --no-audit --no-fund --loglevel=error
-if exist "node_modules\electron\dist\electron.exe" goto open_app
+set "ELECTRON_DIR=%~dp0runtime\electron"
+if exist "%ELECTRON_DIR%\electron.exe" goto open_app
+echo  Downloading the sharer app (one time only)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\get-electron.ps1" -Version %ELECTRON_VERSION% -Dest "%ELECTRON_DIR%"
+if exist "%ELECTRON_DIR%\electron.exe" goto open_app
+
+rem Fallback: share from a Chromium browser (Firefox often has WebRTC switched off).
 echo.
-echo  The sharer app couldn't be installed, so sharing will open in your browser
-echo  instead. Drawings will show over the preview rather than on your screen.
+echo  ==================================================================
+echo   The desktop sharer app couldn't be installed - see the error above.
+echo   Run this launcher again to retry. For now, sharing will open in
+echo   your browser; drawings will show over the preview there instead
+echo   of on top of your screen.
+echo  ==================================================================
+set "BROWSER="
+for %%B in (chrome.exe msedge.exe) do if not defined BROWSER reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\%%B" >nul 2>nul && set "BROWSER=%%B"
+for %%B in (chrome.exe msedge.exe) do if not defined BROWSER reg query "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\%%B" >nul 2>nul && set "BROWSER=%%B"
+if defined BROWSER goto open_browser
+echo   No Chrome or Edge found, so using your default browser. If that's
+echo   Firefox and it says WebRTC is off, follow the steps it shows.
 start "" /b cmd /c "ping -n 3 127.0.0.1 >nul & start http://localhost:%PORT%/share.html"
 goto server
 
+:open_browser
+start "" /b cmd /c "ping -n 3 127.0.0.1 >nul & start %BROWSER% http://localhost:%PORT%/share.html"
+goto server
+
 :open_app
-start "" "%~dp0node_modules\electron\dist\electron.exe" "%~dp0."
+echo  Opening the ScreenDraw sharer app... (if it doesn't appear, see sharer-app.log)
+start "" "%ELECTRON_DIR%\electron.exe" "%~dp0."
 
 rem --- 3. The server runs in this window; close it to stop
 :server

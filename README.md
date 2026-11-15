@@ -16,8 +16,8 @@ Peer-to-peer screen sharing that your friends can draw on.
 
 The first run downloads what's needed, all inside this folder:
 
-1. **Node.js**, if you don't already have v18 or newer. It goes into `runtime/` and doesn't touch your system.
-2. **The sharer app** (Electron, about 100 MB) into `node_modules/`.
+1. **Node.js**, if you don't already have v18 or newer. It goes into `runtime/node` and doesn't touch your system.
+2. **The sharer app's runtime** (Electron, about 110 MB) into `runtime/electron`, straight from Electron's official GitHub releases and checksum-verified. npm isn't involved, because newer npm versions block Electron's own download step.
 
 After that it starts straight away. Each launch:
 
@@ -27,9 +27,9 @@ After that it starts straight away. Each launch:
 
 On Windows, if a firewall prompt asks whether Node.js may accept connections, click **Allow**.
 
-Then in the app: pick a screen → **Start sharing** → **Copy viewer link** → send it to your friends. The link uses your public address (e.g. `http://203.0.113.7:8080/viewer.html?room=k7m2qp`). The green or yellow box under it tells you whether port forwarding is set up.
+Then in the app: pick a screen → **Start sharing** → **Copy viewer link** → send it to your friends. The room code stays the same each time you share, so friends can keep using the same link. Click **New code** to stop old links working. (Only your computer can share in your room: it holds a private key for it.) The link uses your public address (e.g. `http://203.0.113.7:8080/viewer.html?room=k7m2qp`). The green or yellow box under it tells you whether port forwarding is set up.
 
-If the sharer app can't be installed, the launcher opens the browser version of the sharer instead. It works the same, but drawings only appear over a preview in the browser, not on top of your desktop.
+If the sharer app can't be installed, the launcher opens the browser version of the sharer in Chrome or Edge (or your default browser if neither is installed); run the launcher again to retry the download. It works the same, but drawings only appear over a preview in the browser, not on top of your desktop.
 
 ### Settings
 
@@ -87,6 +87,21 @@ Viewer x8fc joined room k7m2qp
 
 The last line before it stops shows where it went wrong. Lines like "could not…" or "rejected" include the actual error message.
 
+Once connected, both sides report the video flow every so often:
+
+```
+  sharer: viewer x8fc: video out: 1920x1080 @ 24 fps, 1800 kbps, held back by: none, route srflx->srflx
+  viewer x8fc: video in: 1920x1080 @ 24 fps, 1750 kbps, 512 frames shown, 0.1% packets lost, route srflx->host
+```
+
+- **`0 fps` on "video out"** means the sharer isn't producing frames. If you shared a single window, it may be minimised; share the whole screen instead.
+- **"held back by: bandwidth"** means your upload speed (or your friend's download speed) is the limit.
+- **Frames going out but "video in" stays at 0 fps or shows a lot of packet loss** means the network between you is dropping the video. A TURN server usually fixes that.
+
+**The desktop app doesn't open or doesn't work**
+
+Look at `sharer-app.log` in the ScreenDraw folder. The app writes its errors there, and serious ones also pop up in a dialog. If the launcher said the app couldn't be installed, scroll up in the launcher window to see the error. Running the launcher again retries the download.
+
 **The page loads, but the screen never appears** ("Connection failed" / "Still connecting…")
 
 The page loaded, but the direct peer-to-peer connection couldn't be made through one of the networks. This is rare on home networks and more common on strict work, school or mobile networks. Add a TURN relay server to `ICE_SERVERS` at the top of `public/rtc.js`. Free tiers are available from several providers, or you can self-host coturn.
@@ -123,6 +138,7 @@ Start ScreenDraw.bat     Windows one-click launcher
 Start ScreenDraw.command macOS one-click launcher
 start.sh                 macOS/Linux launcher
 scripts/get-node.ps1     downloads a private Node.js for Windows (checksum-verified)
+scripts/get-electron.ps1 downloads the desktop app runtime for Windows (checksum-verified)
 server.js                signalling + static files + /info, zero dependencies
 upnp.js                  automatic router port forwarding (UPnP IGD), zero dependencies
 public/                  viewer page, browser sharer, shared WebRTC/drawing code

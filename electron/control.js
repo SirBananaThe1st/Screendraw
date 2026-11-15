@@ -14,6 +14,9 @@ window.desktop.displays().then((list) => {
   $('#display').innerHTML = list.map((d) => `<option value="${d.id}">${d.label}</option>`).join('');
 });
 
+$('#roomSetup').textContent = savedRoomCode();
+$('#newRoom').onclick = () => ($('#roomSetup').textContent = newRoomCode());
+
 trackVideoRect(video, $('.preview'), canvas, board);
 startRendering(canvas, board);
 
@@ -25,6 +28,7 @@ function updateStatus() {
 
 async function start() {
   $('#error').textContent = '';
+  if (!webrtcSupported()) return ($('#error').textContent = WEBRTC_MISSING);
   const server = $('#server').value.trim().replace(/\/+$/, '');
   try { new URL(server); } catch { return ($('#error').textContent = 'Enter a valid server URL.'); }
   try { localStorage.setItem('screendraw.server', server); } catch { /* ignore */ }
@@ -42,8 +46,8 @@ async function start() {
   await window.desktop.openOverlay();
   $('#showOverlay').checked = true;
 
-  room = uid(6);
-  sig = new Signaling(server, room, 'sharer');
+  room = savedRoomCode();
+  sig = new Signaling(server, room, 'sharer', sharerKey());
   hub = createSharerHub({
     sig,
     stream,
