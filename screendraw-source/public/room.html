@@ -3,112 +3,147 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src * ws: wss: http: https:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src * ws: wss: http: https:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; font-src 'self'" />
   <title>ScreenDraw</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
-<body>
-  <div class="app">
-    <header class="topbar">
-      <div class="roomtag" title="Room code">
-        <span class="muted small">Room</span><span class="code" id="roomCode"></span>
-        <button class="ghost small" id="copyInvite" title="Copy a link friends can open in their browser">Copy invite</button>
+<body class="room">
+  <!-- The shared screen fills the window; the controls sit over it and fold away. -->
+  <main class="stage" id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="relayCanvas" class="hidden"></canvas>
+    <div id="stickerLayer" class="stickerlayer"></div>
+    <canvas id="board"></canvas>
+    <div class="empty" id="empty">
+      <div class="emptybox">
+        <h2 id="emptyTitle">Connecting…</h2>
+        <p id="emptyText"></p>
+        <p class="step" id="emptyStep"></p>
       </div>
-      <div class="members" id="members"></div>
-      <div class="spacer"></div>
-      <span class="status warn" id="status">Connecting…</span>
-      <button class="primary" id="shareBtn" title="Share your screen or an app with the room">🖥 Share screen</button>
-      <button class="danger hidden" id="stopBtn">Stop sharing</button>
-      <div class="sep"></div>
-      <button id="soundBtn" title="Sound from the shared screen">🔇</button>
-      <input type="range" id="volume" min="0" max="1" step="0.05" value="1" title="Volume" />
-      <select id="quality" title="Video quality you receive" style="width:auto">
-        <option value="auto">📶 Auto</option>
-        <option value="high">📶 High</option>
-        <option value="low">📶 Data saver</option>
-      </select>
-      <button class="ghost" id="statsBtn" title="Connection stats">ⓘ</button>
-      <button class="ghost" id="fullscreenBtn" title="Fullscreen (F)">⛶</button>
-      <button class="ghost" id="leaveBtn" title="Leave room">Leave</button>
-    </header>
+    </div>
+    <div class="stats hidden" id="stats"></div>
+  </main>
 
-    <div class="banner hidden" id="presenterBanner">
-      <span class="live">LIVE</span>
+  <!-- Top strip -->
+  <header class="strip chrome" id="topbar">
+    <div class="roomid">
+      <img class="mark" src="favicon.svg" alt="" />
+      <span class="label">Room</span>
+      <span class="roomcode" id="roomCode"></span>
+      <button class="ib" id="copyInvite" aria-label="Copy invite link" data-tip="Copy invite link"><i data-icon="link"></i></button>
+    </div>
+
+    <div class="live hidden" id="presenterBanner">
+      <span class="livedot" aria-hidden="true"></span>
       <span id="presenterText"></span>
-      <div class="spacer"></div>
-      <span id="desktopControls" class="group hidden">
-        <button id="drawMine" title="Draw directly on your own screen (Ctrl+Shift+D)">✏️ Draw on my screen</button>
-        <label class="group small"><input type="checkbox" id="showOverlay" checked /> Show drawings on my screen</label>
+      <span class="meta hidden" id="presenterMeta"></span>
+    </div>
+
+    <div class="grow"></div>
+
+    <div class="mine" id="presenterTools">
+      <span id="desktopControls" class="hidden">
+        <button class="tb" id="drawMine" data-tip="Draw on your own screen (Ctrl+Shift+D)"><i data-icon="pencil"></i><span>Draw on screen</span></button>
+        <label class="tb toggle" data-tip="Show everyone's drawings on your screen"><input type="checkbox" id="showOverlay" checked /><i data-icon="layers"></i><span>Overlay</span></label>
       </span>
-      <label class="group small hidden" id="hidePreviewBox" title="Stops showing your own share inside ScreenDraw to save CPU/GPU. Viewers aren't affected."><input type="checkbox" id="hidePreview" /> Hide my preview</label>
+      <label class="tb toggle hidden" id="hidePreviewBox" data-tip="Hide your own preview to save CPU/GPU. Viewers aren't affected."><input type="checkbox" id="hidePreview" /><i data-icon="eye-off"></i><span>Hide preview</span></label>
     </div>
 
-    <div class="toolbar" id="tools">
-      <div class="group">
-        <button id="toolPen" class="on" title="Pen (P)">✏️ Pen</button>
-        <button id="toolMove" title="Move / resize stickers (V)">✋ Move</button>
-      </div>
-      <div class="sep"></div>
-      <div class="group" id="swatches"></div>
-      <input type="color" id="customColor" title="Custom colour" />
-      <span class="penpreview" id="penPreview"></span>
-      <input type="range" id="penSize" min="1" max="16" step="1" title="Pen size ([ and ])" />
-      <div class="sep"></div>
-      <button id="fadeBtn" title="Vanishing ink: strokes disappear shortly after you draw them (E)">✨ Vanish</button>
-      <select id="fadeTime" title="How long vanishing ink stays" style="width:auto">
-        <option value="1500">1.5 s</option><option value="3000" selected>3 s</option><option value="6000">6 s</option><option value="10000">10 s</option>
+    <div class="members" id="members"></div>
+    <span class="status warn" id="status">Connecting…</span>
+
+    <button class="btn primary" id="shareBtn"><i data-icon="monitor-up"></i><span>Share screen</span></button>
+    <button class="btn danger hidden" id="stopBtn"><i data-icon="monitor-off"></i><span>Stop sharing</span></button>
+
+    <div class="rule"></div>
+
+    <span class="viewer" id="viewerTools">
+    <div class="audio">
+      <button class="ib" id="soundBtn" aria-label="Sound" data-tip="Sound from the shared screen"><i data-icon="volume-x"></i></button>
+      <input type="range" id="volume" min="0" max="1" step="0.05" value="1" aria-label="Volume" />
+    </div>
+    <label class="selectwrap" data-tip="Video quality you receive">
+      <i data-icon="gauge"></i>
+      <select id="quality" aria-label="Video quality">
+        <option value="auto">Auto</option>
+        <option value="high">High</option>
+        <option value="low">Data saver</option>
       </select>
-      <div class="sep"></div>
-      <button id="stickerBtn" title="Add an image sticker (or paste / drop an image)">🖼 Sticker</button>
-      <button id="deleteSticker" class="hidden" title="Delete the selected sticker (Delete)">🗑 Delete</button>
-      <input type="file" id="stickerFile" accept="image/*" class="hidden" />
-      <div class="sep"></div>
-      <button id="undoBtn" title="Undo your last stroke (Ctrl+Z)">↶ Undo</button>
-      <button id="clearMine" class="danger" title="Remove your drawings and stickers">Clear mine</button>
-      <button id="clearAll" class="danger hidden" title="Remove everyone's drawings (you're sharing)">Clear all</button>
-    </div>
+    </label>
+    <button class="ib hidden" id="reloadBtn" aria-label="Reload video" data-tip="Reload the video (R)"><i data-icon="refresh-cw"></i></button>
+    </span>
+    <button class="ib" id="statsBtn" aria-label="Connection stats" data-tip="Connection stats"><i data-icon="activity"></i></button>
+    <button class="ib" id="fullscreenBtn" aria-label="Fullscreen" data-tip="Fullscreen (F)"><i data-icon="maximize"></i></button>
+    <button class="ib" id="pinBtn" aria-label="Keep controls visible" data-tip="Keep controls visible (H)"><i data-icon="pin"></i></button>
+    <button class="ib" id="leaveBtn" aria-label="Leave room" data-tip="Leave room"><i data-icon="log-out"></i></button>
+  </header>
 
-    <main class="stage" id="stage">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="relayCanvas" class="hidden"></canvas>
-      <canvas id="board"></canvas>
-      <div class="empty" id="empty"><div class="box"><h2 id="emptyTitle">Connecting…</h2><div id="emptyText"></div><div class="step" id="emptyStep"></div></div></div>
-      <div class="stats hidden" id="stats"></div>
-    </main>
+  <!-- Tool rail -->
+  <aside class="rail chrome" id="tools" aria-label="Drawing tools">
+    <button class="rb on" id="toolPen" aria-label="Pen" data-tip="Pen (P)"><i data-icon="pen-line"></i></button>
+    <button class="rb" id="toolMove" aria-label="Move stickers" data-tip="Move and resize stickers (V)"><i data-icon="move"></i></button>
+    <div class="railrule"></div>
+    <button class="rb" id="colorBtn" aria-label="Colour" data-tip="Colour (1–0)" data-pop="colorPop"><span class="well" id="colorWell"></span></button>
+    <button class="rb" id="sizeBtn" aria-label="Pen size and ink" data-tip="Size and ink ([ ])" data-pop="sizePop"><span class="penpreview" id="penPreview"></span></button>
+    <button class="rb" id="fadeBtn" aria-label="Vanishing ink" data-tip="Vanishing ink (E)"><i data-icon="sparkles"></i></button>
+    <div class="railrule"></div>
+    <button class="rb" id="stickerBtn" aria-label="Add sticker" data-tip="Add an image or GIF"><i data-icon="sticker"></i></button>
+    <button class="rb hidden" id="deleteSticker" aria-label="Delete sticker" data-tip="Delete sticker (Del)"><i data-icon="trash-2"></i></button>
+    <input type="file" id="stickerFile" accept="image/*" class="hidden" />
+    <div class="railrule"></div>
+    <button class="rb" id="undoBtn" aria-label="Undo" data-tip="Undo (Ctrl+Z)"><i data-icon="undo-2"></i></button>
+    <button class="rb" id="clearMine" aria-label="Clear my drawings" data-tip="Clear my drawings"><i data-icon="eraser"></i></button>
+    <button class="rb hidden" id="clearAll" aria-label="Clear everyone's drawings" data-tip="Clear everyone's drawings"><i data-icon="brush-cleaning"></i></button>
+  </aside>
+
+  <!-- Pop-outs from the rail -->
+  <div class="pop chrome" id="colorPop" role="dialog" aria-label="Colour">
+    <div class="swatches" id="swatches"></div>
+    <label class="custom"><span>Custom</span><input type="color" id="customColor" /></label>
   </div>
+  <div class="pop chrome" id="sizePop" role="dialog" aria-label="Pen size and ink">
+    <label class="poprow"><span>Size</span><input type="range" id="penSize" min="1" max="16" step="1" /></label>
+    <label class="poprow"><span>Vanishing ink lasts</span>
+      <select id="fadeTime">
+        <option value="1500">1.5 seconds</option><option value="3000" selected>3 seconds</option><option value="6000">6 seconds</option><option value="10000">10 seconds</option>
+      </select>
+    </label>
+  </div>
+
+  <button class="handle" id="uiToggle" aria-label="Show controls" data-tip="Show controls (H)"><i data-icon="sliders-horizontal"></i></button>
 
   <!-- Share dialog -->
   <dialog id="shareDialog">
     <form method="dialog">
-      <div class="head"><h2>Share with the room</h2><button class="ghost" value="cancel">✕</button></div>
+      <div class="head"><h2>Share with the room</h2><button class="ib" value="cancel" aria-label="Close"><i data-icon="x"></i></button></div>
       <div class="body">
-        <div id="takeoverNote" class="callout hidden"></div>
+        <div id="takeoverNote" class="note hidden"></div>
         <div id="sourcePicker" class="hidden">
           <div class="tabs">
-            <button type="button" class="on" data-kind="screen">Entire screen</button>
-            <button type="button" data-kind="window">Application window</button>
-            <span class="spacer"></span>
-            <button type="button" class="ghost" id="refreshSources">↻ Refresh</button>
+            <button type="button" class="on" data-kind="screen"><i data-icon="monitor"></i>Entire screen</button>
+            <button type="button" data-kind="window"><i data-icon="app-window"></i>Application window</button>
+            <span class="grow"></span>
+            <button type="button" class="ib" id="refreshSources" aria-label="Refresh" data-tip="Refresh"><i data-icon="rotate-cw"></i></button>
           </div>
           <div class="sources" id="sources"></div>
         </div>
-        <p id="browserPickerNote" class="muted hidden">After you click <b>Start sharing</b>, your browser asks which screen, window or tab to share.</p>
+        <p id="browserPickerNote" class="muted hidden">After you select <b>Start sharing</b>, your browser asks which screen, window or tab to share.</p>
 
         <div class="settings">
           <div>
-            <label class="field">Send video</label>
-            <div class="radio" id="modeRadio">
-              <label title="Straight from your computer to each viewer"><input type="radio" name="mode" value="p2p" />Direct (P2P)</label>
-              <label title="Uploaded once to the server, which sends it to everyone"><input type="radio" name="mode" value="relay" />Through server</label>
+            <span class="field">Send video</span>
+            <div class="seg" id="modeRadio">
+              <label title="Straight from your computer to each viewer"><input type="radio" name="mode" value="p2p" /><span>Direct</span></label>
+              <label title="Uploaded once to the server, which sends it to everyone"><input type="radio" name="mode" value="relay" /><span>Through server</span></label>
             </div>
-            <div class="muted small" id="modeHint" style="margin-top:6px"></div>
+            <p class="hint" id="modeHint"></p>
           </div>
           <div>
-            <label class="field">Optimise for</label>
-            <div class="radio">
-              <label><input type="radio" name="optimize" value="detail" />Text &amp; detail</label>
-              <label><input type="radio" name="optimize" value="motion" />Motion &amp; video</label>
+            <span class="field">Optimise for</span>
+            <div class="seg">
+              <label><input type="radio" name="optimize" value="detail" /><span>Text and detail</span></label>
+              <label><input type="radio" name="optimize" value="motion" /><span>Motion and video</span></label>
             </div>
           </div>
           <div>
@@ -120,6 +155,7 @@
             <select id="fpsSelect"></select>
           </div>
         </div>
+
         <label class="check" id="soundBrowser"><input type="checkbox" id="audioCheck" /> <span id="audioLabel">Share sound</span></label>
         <div id="soundDesktop" class="hidden">
           <label class="field" for="soundMode">Sound</label>
@@ -132,36 +168,37 @@
               <option value="apps">Only these apps…</option>
               <option value="devices">Only these output devices…</option>
             </select>
-            <button type="button" class="ghost" id="refreshSound" title="Refresh the list of apps and devices">↻</button>
+            <button type="button" class="ib" id="refreshSound" aria-label="Refresh apps and devices" data-tip="Refresh"><i data-icon="rotate-cw"></i></button>
           </div>
           <div class="picklist hidden" id="soundPick"></div>
-          <div class="muted small" id="soundNote" style="margin-top:6px"></div>
+          <p class="hint" id="soundNote"></p>
         </div>
       </div>
       <div class="foot">
-        <span class="muted small" id="shareError" style="margin-right:auto;color:#ff9aa4"></span>
-        <button value="cancel">Cancel</button>
-        <button class="primary" value="start" id="startShare">Start sharing</button>
+        <span class="error" id="shareError"></span>
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="start" id="startShare">Start sharing</button>
       </div>
     </form>
   </dialog>
 
   <!-- Your name and cursor colour -->
-  <dialog id="profileDialog" style="width:min(380px,94vw)">
+  <dialog id="profileDialog" class="narrow">
     <form method="dialog">
-      <div class="head"><h2>You</h2><button class="ghost" value="cancel">✕</button></div>
+      <div class="head"><h2>Your name and cursor</h2><button class="ib" value="cancel" aria-label="Close"><i data-icon="x"></i></button></div>
       <div class="body">
         <label class="field" for="profileName">Name</label>
         <input id="profileName" type="text" maxlength="24" />
-        <label class="field">Cursor colour</label>
+        <span class="field">Cursor colour</span>
         <div class="colorgrid" id="profileColors"></div>
-        <div class="row" style="margin-top:8px"><span class="muted small">Custom:</span><input type="color" id="profileCustom" /></div>
+        <label class="custom"><span>Custom</span><input type="color" id="profileCustom" /></label>
       </div>
-      <div class="foot"><button value="cancel">Cancel</button><button class="primary" value="save">Save</button></div>
+      <div class="foot"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="save">Save</button></div>
     </form>
   </dialog>
 
   <script src="js/core.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/transport.js"></script>
   <script src="js/board.js"></script>
   <script src="js/input.js"></script>
@@ -169,5 +206,7 @@
   <script src="js/p2p.js"></script>
   <script src="js/relay.js"></script>
   <script src="js/room.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/update.js"></script>
 </body>
 </html>

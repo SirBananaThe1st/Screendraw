@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { WindowTracker } = require('./tracker');
 const { createAudioSources } = require('./audio');
+const { createUpdater } = require('./updater');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 const PRELOAD = path.join(__dirname, 'preload.js');
@@ -94,12 +95,26 @@ app.whenReady().then(() => {
   watch(mainWin, 'app');
   mainWin.loadFile(path.join(PUBLIC, 'index.html'));
   mainWin.on('closed', () => { mainWin = null; audio.stop(); closeOverlay(); app.quit(); });
+
+  // Update checks: shortly after start, then every 6 hours.
+  updater = createUpdater({ app, log, send: (s) => mainWin?.webContents.send('update-status', s) });
+  if (process.env.SCREENDRAW_NO_UPDATE_CHECK !== '1') {
+    setTimeout(() => updater.check(false), 8000);
+    setInterval(() => updater.check(false), 6 * 60 * 60 * 1000).unref?.();
+  }
 });
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => globalShortcut.unregisterAll());
 
 /* -------------------------------------------------------------- sources */
+let updater = null;
+ipcMain.handle('update-get', () => updater?.status);
+ipcMain.handle('update-check', () => updater?.check(true));
+ipcMain.handle('update-download', () => updater?.download());
+ipcMain.handle('update-install', () => updater?.install());
+ipcMain.handle('update-open', () => updater?.openPage());
+
 ipcMain.on('info', (e) => { e.returnValue = { platform: process.platform, systemAudio, version: app.getVersion() }; });
 
 ipcMain.handle('get-sources', async () => {
@@ -155,6 +170,11 @@ function placeOverlay(rect) {
 
 async function openOverlay(sourceId) {
   closeOverlay();
+  // While sharing, keep ScreenDraw's own window out of the capture too.
+  // Otherwise a whole-screen share shows your preview (with everyone's cursors
+  // and stickers) inside itself, and viewers see doubled, trailing copies.
+  // Works on Windows 10 2004+ and macOS; not supported on Linux.
+  mainWin?.setContentProtection(true);
   const isWindow = sourceId.startsWith('window');
   const initial = isWindow ? { x: 0, y: 0, width: 400, height: 300 } : displayFor(sourceId).bounds;
   overlay = new BrowserWindow({
@@ -185,6 +205,7 @@ async function openOverlay(sourceId) {
 }
 
 function closeOverlay() {
+  mainWin?.setContentProtection(false);
   tracker?.stop(); tracker = null;
   drawMode = false;
   try { globalShortcut.unregister(DRAW_SHORTCUT); } catch { /* ignore */ }

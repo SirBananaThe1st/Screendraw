@@ -124,9 +124,28 @@
     };
   }
 
-  // Turn an image file into a small sticker data URL that fits the server limit.
-  async function makeSticker(file, maxKB) {
+  // Turn an image file into a sticker data URL that fits the server limits.
+  // Animated GIFs are kept byte-for-byte so they stay animated; a GIF over its
+  // limit is added as a still image instead (tooBig: true).
+  async function makeSticker(file, maxKB, maxGifKB = 2048) {
     const bmp = await createImageBitmap(file);
+    if (file.type === 'image/gif') {
+      if (file.size <= maxGifKB * 1024) {
+        const src = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(r.error);
+          r.readAsDataURL(file);
+        });
+        return { src, aspect: bmp.width / bmp.height, animated: true };
+      }
+      return { ...stillSticker(bmp, maxKB), tooBig: true };
+    }
+    return stillSticker(bmp, maxKB);
+  }
+
+  // Resize and re-encode a still image until it fits.
+  function stillSticker(bmp, maxKB) {
     for (const side of [512, 384, 256, 192, 128]) {
       const s = Math.min(1, side / Math.max(bmp.width, bmp.height));
       const c = document.createElement('canvas');

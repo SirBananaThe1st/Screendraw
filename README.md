@@ -4,7 +4,7 @@ Share your screen (or a single app) with friends, and everyone draws on it toget
 
 - **One app for everyone.** Join a room, watch, draw, and share your own screen. The ScreenDraw app runs on Windows and Linux. Friends can also just use a browser.
 - **One sharer at a time.** Anyone can click **Share screen**. If someone is already sharing, their share stops and yours takes over.
-- **Drawing:** any colour, pen sizes, **vanishing ink** that fades a few seconds after you draw, **image stickers** you can move and resize, undo, and clear.
+- **Drawing:** any colour, pen sizes, **vanishing ink** that fades a few seconds after you draw, **image and animated GIF stickers** you can move and resize, undo, and clear.
 - **Everyone's cursor**, labelled with their name, in a colour they choose.
 - **Sound, your choice of what:** only the app you're sharing, everything except certain apps (such as Discord, to avoid echo), only chosen apps, or only chosen output devices such as "Game" (more than one is fine). This works in the Windows and Linux apps. Browsers share tab or system audio.
 - **Quality:** the sharer picks max resolution, frame rate (up to 60) and "text" or "motion". Each viewer picks Auto, High or Data saver.
@@ -28,8 +28,8 @@ Share your screen (or a single app) with friends, and everyone draws on it toget
 2. The window shows your addresses:
    ```
    This computer:   http://localhost:8080
-   Same Wi-Fi/LAN:  http://192.168.0.176:8080
-   Friends online:  http://86.132.9.188:8080   <-- friends enter this as the server
+   Same Wi-Fi/LAN:  http://192.168.1.20:8080
+   Friends online:  http://203.0.113.7:8080   <-- friends enter this as the server
    ```
    It also tries to forward the port on your router automatically (UPnP). If that fails, forward **TCP 8080** to your PC by hand.
 3. Close the window to stop the server.
@@ -47,14 +47,16 @@ Settings are in **`.env`** (edit with Notepad, then restart the server):
 | `STUN_URLS` | Google STUN | STUN servers for direct connections |
 | `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | (none) | A TURN relay for friends on strict networks |
 | `MAX_ROOMS`, `MAX_PER_ROOM` | `200`, `20` | Limits |
-| `MAX_STICKER_KB` | `400` | Largest sticker image |
+| `MAX_STICKER_KB` | `400` | Largest still sticker image |
+| `MAX_GIF_KB` | `2048` | Largest animated GIF sticker |
+| `MAX_ROOM_STICKERS_MB` | `24` | Total sticker space per room |
 | `POLL_HOLD_MS`, `MEMBER_TIMEOUT_MS` | `25000`, `35000` | Fallback connection tuning |
 
 Your `.env` stays on your PC. Friends never see it; they only need the address and, if you set one, the password.
 
 ## Joining (everyone)
 
-- **App:** the first time it opens, enter the server address (e.g. `86.132.9.188:8080`). It's remembered, and **Change / forget** on the join screen lets you enter another. Then enter your name and a room code, or press **New room**, and **Join room**.
+- **App:** the first time it opens, enter the server address (e.g. `203.0.113.7:8080`). It's remembered, and **Change / forget** on the join screen lets you enter another. Then enter your name and a room code, or press **New room**, and **Join room**.
 - **Browser:** open the server address (or an invite link from **Copy invite**), enter your name and room code, and join.
 
 ## Using a room
@@ -72,21 +74,26 @@ Your `.env` stays on your PC. Friends never see it; they only need the address a
     - **Only these output devices…:** tick one or more outputs, e.g. *SteelSeries Sonar – Gaming* but not *– Chat*.
     - **No sound**
   - **Share sound** (browser): also tick "Share audio" in the browser's picker.
-- **Drawing tools:**
-  - **Pen:** 10 colours plus a colour picker, and a size slider.
-  - **✨ Vanish:** strokes fade after 1.5, 3, 6 or 10 seconds.
-  - **🖼 Sticker:** pick an image, paste one with Ctrl+V, or drag it onto the screen. Use **✋ Move** to drag it, the corner handle to resize, and **Delete** to remove it.
-  - **Undo**, **Clear mine**, and **Clear all** (sharer only).
-- **Shortcuts:** `1`–`0` colours · `[` `]` size · `P` pen · `V` move · `E` vanish · `Ctrl+Z` undo · `F` fullscreen.
-- **Cursors:** everyone's pointer shows on the shared screen with their name. Click your own name at the top to change it.
-- **🔇/🔊 and volume:** turn on the sharer's sound (browsers need a click first).
-- **📶 Quality:** **Auto** (drops to low quality if your connection struggles, and goes back up later), **High** or **Data saver**.
-- **ⓘ:** shows live stats: route, resolution, fps, bitrate and codec.
+- **Layout:** the shared screen fills the window. During a share the top bar and the tool rail on the left fold away after two seconds. Move the pointer to the top or left edge to bring them back, select the controls button in the bottom-right corner, or press **H**. The pin button in the top bar keeps them visible.
+- **Drawing tools (left rail):**
+  - **Pen** and **Move** (drag, resize and delete stickers).
+  - **Colour:** 10 colours plus a colour picker.
+  - **Size and ink:** pen size, and how long vanishing ink lasts (1.5, 3, 6 or 10 seconds).
+  - **Vanishing ink:** strokes fade on their own.
+  - **Sticker:** pick an image or animated GIF, paste one with Ctrl+V, or drag it onto the screen. GIFs stay animated if they're within the size limit (2 MB by default). Pasting usually turns a GIF into a still image, so pick or drag GIFs instead. Use **Move** to drag it, the corner handle to resize, and **Delete** to remove it.
+  - **Undo**, **Clear my drawings**, and **Clear everyone's drawings** (sharer only).
+- **Shortcuts:** `1` to `0` colours, `[` `]` size, `P` pen, `V` move, `E` vanishing ink, `Ctrl+Z` undo, `F` fullscreen, `R` reload video, `H` show or hide the controls.
+- **Cursors:** everyone's pointer shows on the shared screen with their name. Select your own avatar at the top to change your name or cursor colour. The person sharing has a red ring.
+- **Sound and volume:** turn on the sharer's sound (browsers need a click first).
+- **Quality:** **Auto** (drops to low quality if your connection struggles, and goes back up later), **High** or **Data saver**.
+- **Reload** (or **R**): reconnects the video if the picture freezes, goes black or gets stuck, without leaving the room.
+- **Stats:** live route, resolution, fps, bitrate and codec.
 - **While you share from the app:**
   - Drawings appear on your real screen, on top of the shared app or screen, and are hidden from the capture, so viewers don't see them twice.
-  - **Draw on my screen** (or **Ctrl+Shift+D**) lets you draw directly; press **Esc** or **Done** to go back to click-through.
-  - **Show drawings on my screen** hides or shows the layer.
-  - **Hide my preview** stops showing your own share inside ScreenDraw to save CPU/GPU. Viewers aren't affected. (It works in browsers too.)
+  - **Draw on screen** (or **Ctrl+Shift+D**) lets you draw directly; press **Esc** or **Done** to go back to click-through.
+  - **Overlay** hides or shows the layer.
+  - **Hide preview** stops showing your own share (and the drawings over it) inside ScreenDraw to save CPU/GPU. Viewers aren't affected. (It works in browsers too.)
+  - While you share, the ScreenDraw window is kept out of the capture (Windows 10 2004+ and macOS), so viewers don't see doubled cursors or trails. On Linux, or when sharing from a browser, minimise ScreenDraw or tick **Hide my preview** when sharing the whole screen.
 
 ### Direct (P2P) or through the server?
 
@@ -120,6 +127,18 @@ The server window logs each join, share and failure, including messages from bro
   - **Other systems** (macOS): sound can't be shared from the app.
 - **Linux:** the overlay can't be hidden from the capture, so viewers also see it in the video. Turn off "Show drawings on my screen" if it bothers you. If the AppImage won't start, try `./ScreenDraw-Linux-x86_64.AppImage --appimage-extract-and-run`.
 - **macOS:** not built. The browser version works.
+
+## Updates
+
+The app checks the GitHub releases of the repository in `package.json` (`"screendraw": { "updateRepo": "SirBananaThe1st/Screendraw" }`) shortly after it starts and every 6 hours. Use **Check for updates** on the join screen to check now. The single-file `ScreenDraw.exe` and the AppImage update themselves (**Update**, then **Restart to update**). The folder version opens the release page. Set `SCREENDRAW_NO_UPDATE_CHECK=1` to turn checks off.
+
+**Publishing a release so updates work:**
+1. Bump `"version"` in `package.json` (e.g. `1.1.1`), build with `scripts/build.sh`, and commit.
+2. On GitHub, create a **release** (not a pre-release) with the tag `v1.1.1` (or `1.1.1`).
+3. Attach `dist/ScreenDraw.exe`, `dist/ScreenDraw-Linux-x86_64.AppImage`, `dist/ScreenDraw-Windows-x64.zip` and `dist/ScreenDraw-Server.zip`. The app looks for the `.exe` and `.AppImage` files by type.
+4. The repository must be **public** (the app checks without logging in).
+
+GitHub records a SHA-256 checksum for every uploaded file, and the app checks downloads against it.
 
 ## Building from source
 

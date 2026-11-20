@@ -312,9 +312,17 @@
       const f = this.pending;
       if (!f) return;
       this.pending = null;
+      // Keep the newest frame: resizing a canvas wipes it, and a still screen
+      // may not send another frame for a long time.
+      if (this.last) this.last.close();
+      this.last = f;
+      this.redraw();
+    }
+
+    // Draw the latest frame again (called after the canvas is resized).
+    redraw() {
       const c = this.canvas;
-      if (c._css) this.ctx.drawImage(f, 0, 0, c.width, c.height);
-      f.close();
+      if (this.last && c._css) this.ctx.drawImage(this.last, 0, 0, c.width, c.height);
     }
 
     /* ---------------------------------------------------------- audio */
@@ -381,6 +389,7 @@
       this.closed = true;
       for (const d of [this.decoder, this.audioDecoder]) { try { if (d && d.state !== 'closed') d.close(); } catch { /* ignore */ } }
       this.pending?.close(); this.pending = null;
+      this.last?.close(); this.last = null;
       this.audioCtx?.close().catch(() => {});
     }
   }

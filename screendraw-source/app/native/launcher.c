@@ -315,8 +315,12 @@ static LRESULT CALLBACK wndProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
   return DefWindowProcW(w, m, wp, lp);
 }
 
+static wchar_t g_self[MAX_PATH];
+
 static int launch(const wchar_t *dir) {
   wchar_t exe[MAX_PATH], cmd[32768];
+  /* Tell the app which file to replace when it updates itself. */
+  SetEnvironmentVariableW(L"SCREENDRAW_LAUNCHER", g_self);
   _snwprintf(exe, MAX_PATH, L"%ls\\ScreenDraw.exe", dir);
   /* pass through our command-line arguments */
   const wchar_t *args = GetCommandLineW();
@@ -343,6 +347,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show) {
   (void)prev; (void)cmdline; (void)show;
   wchar_t self[MAX_PATH], local[MAX_PATH], wid[17], marker[MAX_PATH], exe[MAX_PATH];
   GetModuleFileNameW(NULL, self, MAX_PATH);
+  wcscpy(g_self, self);
   g_file = _wfopen(self, L"rb");
   if (!g_file || !readTrailer(g_file, &g_pl)) { fail(L"ScreenDraw.exe is incomplete. Please download it again.", NULL); return 1; }
 

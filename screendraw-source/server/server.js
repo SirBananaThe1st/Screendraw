@@ -13,7 +13,10 @@ const { acceptUpgrade } = require('./ws');
 const { mapPort } = require('./upnp');
 const env = require('./env');
 
-const VERSION = 2;
+const VERSION = 2; // protocol version shared by server and clients
+let PKG = {};
+try { PKG = require('../package.json'); } catch { /* not shipped */ }
+const APP_VERSION = PKG.version || '';
 const config = env.load();
 const PUBLIC = path.join(__dirname, '..', 'public');
 const ROOM_RE = /^[a-z0-9][a-z0-9-]{2,31}$/;
@@ -159,6 +162,7 @@ function join(member, hello) {
       allowRelay: config.allowRelay,
       defaultMode: config.defaultMode,
       maxStickerKB: config.maxStickerKB,
+      maxGifKB: config.maxGifKB,
       publicUrl: info.publicUrl,
       transport: member.transport,
     },
@@ -353,8 +357,16 @@ function handleBoard(room, m, msg) {
     case 'sticker-add': {
       if (typeof msg.id !== 'string' || msg.id.length > 64 || !msg.id.startsWith(m.id + '-') || room.stickers.has(msg.id)) return;
       if (typeof msg.src !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(msg.src)) return;
-      if (msg.src.length > config.maxStickerKB * 1024 * 1.37 + 64 || room.stickers.size >= 40) {
-        m.send({ type: 'notice', message: 'That sticker is too big, or the room has too many stickers.' });
+      const isGif = msg.src.startsWith('data:image/gif');
+      const limitKB = isGif ? config.maxGifKB : config.maxStickerKB;
+      if (msg.src.length > limitKB * 1024 * 1.37 + 64) {
+        m.send({ type: 'notice', message: `That ${isGif ? 'GIF' : 'sticker'} is too big (the limit is ${limitKB >= 1024 ? `${+(limitKB / 1024).toFixed(1)} MB` : `${limitKB} KB`}).` });
+        return;
+      }
+      let used = 0;
+      for (const st of room.stickers.values()) used += st.src.length;
+      if (room.stickers.size >= 40 || used + msg.src.length > config.maxRoomStickersMB * 1024 * 1024 * 1.37) {
+        m.send({ type: 'notice', message: 'This room has too many stickers. Remove some (or clear) to add more.' });
         return;
       }
       if (![msg.x, msg.y, msg.w, msg.h].every(num)) return;
@@ -442,6 +454,10 @@ function handleMessage(m, msg) {
       for (const v of room.members.values()) if (v !== m && v.canBinary && (kind === 'audio' || v.layer === layer)) v.send(cfg);
       return;
     }
+    case 'relay-resync': { // viewer pressed Reload
+      if (!isPresenter && room.presenter?.mode === 'relay') subscribeRelay(room, m, true);
+      return;
+    }
     case 'keyframe-request': {
       if (!isPresenter && room.presenter?.mode === 'relay') { m.needsKey = true; room.requestKey(m.layer); }
       return;
@@ -459,7 +475,8 @@ function handleMessage(m, msg) {
 
 function onUpgrade(req, socket, head) {
   if (new URL(req.url, 'http://x').pathname !== '/ws') return socket.destroy();
-  const ws = acceptUpgrade(req, socket, head, { maxPayload: Math.max(4, config.maxStickerKB / 1024 * 2) * 1024 * 1024 });
+  const biggestKB = Math.max(config.maxStickerKB, config.maxGifKB);
+  const ws = acceptUpgrade(req, socket, head, { maxPayload: Math.max(4 * 1024 * 1024, Math.ceil(biggestKB * 1024 * 1.4) + 65536) });
   if (!ws) return;
   const m = new Member('ws');
   m.ws = ws;
@@ -494,7 +511,7 @@ function readBody(req, limit, cb) {
 function pollSend(req, res, url) {
   const sid = url.searchParams.get('sid') || '';
   if (!/^[a-z0-9]{16,40}$/.test(sid)) return json(res, {}, 400);
-  readBody(req, config.maxStickerKB * 1024 * 1.5 + 65536, (msgs) => {
+  readBody(req, Math.max(config.maxStickerKB, config.maxGifKB) * 1024 * 1.5 + 65536, (msgs) => {
     if (!Array.isArray(msgs)) return json(res, {}, 400);
     let m = pollSessions.get(sid);
     if (!m) { m = new Member('poll'); pollSessions.set(sid, m); }
@@ -548,7 +565,7 @@ setInterval(() => {
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
 };
 
 function serveStatic(res, url) {
@@ -566,6 +583,7 @@ function serveStatic(res, url) {
 const info = {
   app: 'screendraw',
   version: VERSION,
+  appVersion: APP_VERSION,
   port: config.port,
   localUrl: `http://localhost:${config.port}`,
   lanUrls: [],
@@ -580,7 +598,11 @@ const info = {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
-  if (url.pathname === '/info') return json(res, info);
+  // Public info only: home-network addresses and port-forwarding details stay in the server window.
+  if (url.pathname === '/info') {
+    const { lanUrls, localUrl, forwarding, message, port, ...pub } = info;
+    return json(res, pub);
+  }
   if (url.pathname === '/rt/send' && req.method === 'POST') return pollSend(req, res, url);
   if (url.pathname === '/rt/poll') return pollReceive(req, res, url);
   if (url.pathname === '/rt/leave' && req.method === 'POST') return pollLeave(req, res, url);
@@ -658,10 +680,33 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
+// Mention a newer ScreenDraw release, if there is one (GitHub, repo from package.json).
+function checkForUpdate() {
+  const repo = PKG.screendraw?.updateRepo;
+  if (!repo || !APP_VERSION || process.env.SCREENDRAW_NO_UPDATE_CHECK === '1') return;
+  const parse = (v) => { const m = /(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(v || '')); return m ? [+m[1], +m[2], +(m[3] || 0)] : null; };
+  const req = https.get(`https://api.github.com/repos/${repo}/releases/latest`, { headers: { 'User-Agent': `ScreenDraw-server/${APP_VERSION}`, Accept: 'application/vnd.github+json' }, timeout: 8000 }, (res) => {
+    let d = ''; res.on('data', (c) => (d += c));
+    res.on('end', () => {
+      try {
+        const r = JSON.parse(d);
+        const a = parse(r.tag_name), b = parse(APP_VERSION);
+        if (a && b && (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0) {
+          console.log(`\n  ** A newer ScreenDraw is available: ${r.tag_name} (this server is ${APP_VERSION}).`);
+          console.log(`     Download: ${r.html_url}\n`);
+        }
+      } catch { /* ignore */ }
+    });
+  });
+  req.on('timeout', () => req.destroy());
+  req.on('error', () => {});
+}
+
 server.listen(config.port, async () => {
-  console.log(`ScreenDraw server listening on port ${config.port}. Checking network access…`);
+  console.log(`ScreenDraw server${APP_VERSION ? ` ${APP_VERSION}` : ''} listening on port ${config.port}. Checking network access…`);
   await setUpNetwork();
   printBanner();
+  checkForUpdate();
 });
 
 let exiting = false;

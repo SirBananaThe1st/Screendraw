@@ -120,7 +120,7 @@ echo "-- Server package"
 SRV="$WORK/ScreenDraw-Server"
 mkdir -p "$SRV/scripts"
 cp -r server public "$SRV/"
-cp .env.example "Start ScreenDraw Server.bat" start-server.sh scripts/get-node.ps1 "$SRV/" 2>/dev/null || true
+cp .env.example "Start ScreenDraw Server.bat" start-server.sh scripts/get-node.ps1 package.json CHANGELOG.md "$SRV/" 2>/dev/null || true
 mv "$SRV/get-node.ps1" "$SRV/scripts/"
 cp README.md "$SRV/" 2>/dev/null || true
 chmod +x "$SRV/start-server.sh"

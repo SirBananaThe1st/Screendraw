@@ -52,6 +52,8 @@
     $('#toolPen').classList.toggle('on', state.tool === 'pen');
     $('#toolMove').classList.toggle('on', state.tool === 'move');
     boardCanvas.classList.toggle('move', state.tool === 'move');
+    document.documentElement.style.setProperty('--pen', state.color);
+    $('#colorWell').style.background = state.color;
   }
   function setColor(c) { state.color = c.toLowerCase(); if (state.tool !== 'pen') setTool('pen'); renderPen(); savePen(); }
   function setSize(s) { state.size = SD.clamp(s, 1, 16); renderPen(); savePen(); }
@@ -68,7 +70,8 @@
   const isPresenter = () => !!state.me && state.presenter?.id === state.me.id;
   const canEdit = (st) => st.author === state.me?.id || isPresenter();
 
-  SD.startRendering(boardCanvas, board, () => ({ selected: input?.selected, hideCursor: state.me?.id, editable: canEdit }));
+  const stickerLayer = $('#stickerLayer');
+  SD.startRendering(boardCanvas, board, () => ({ selected: input?.selected, hideCursor: state.me?.id, editable: canEdit, stickerLayer }));
   const input = SD.attachInput(boardCanvas, {
     board,
     myId: () => state.me?.id || 'nobody',
@@ -95,7 +98,8 @@
     if (!file || !file.type.startsWith('image/')) return;
     if (!state.presenter) { SD.toast('Stickers go on the shared screen. Wait until someone is sharing.'); return; }
     try {
-      const { src, aspect } = await SD.makeSticker(file, state.config?.maxStickerKB || 400);
+      const { src, aspect, tooBig } = await SD.makeSticker(file, state.config?.maxStickerKB || 400, state.config?.maxGifKB || 2048);
+      if (tooBig) SD.toast(`That GIF is over the ${+((state.config?.maxGifKB || 2048) / 1024).toFixed(1)} MB limit, so it was added as a still image.`);
       const css = boardCanvas._css || { w: 16, h: 9 };
       const w = 0.22, h = (w / aspect) * (css.w / css.h);
       const msg = { type: 'sticker-add', id: `${state.me.id}-s${SD.uid(5)}`, author: state.me.id, src, x: 0.5 - w / 2, y: 0.5 - h / 2, w, h };
@@ -125,6 +129,7 @@
     const { w, h } = mediaSize();
     const c = SD.contain(r, w, h);
     SD.fitCanvas(boardCanvas, c.x, c.y, c.w, c.h);
+    Object.assign(stickerLayer.style, { left: `${c.x}px`, top: `${c.y}px`, width: `${c.w}px`, height: `${c.h}px` });
     if (mediaKind === 'relay') { SD.fitCanvas(relayCanvas, c.x, c.y, c.w, c.h); viewRelay?.redraw(); }
     board.dirty = true;
   }
@@ -145,13 +150,14 @@
   function showWaiting(p) {
     showEmpty(`Connecting to ${p.name}'s screen…`, '', p.mode === 'relay' ? 'Video is coming through the server.' : 'Video is coming directly from their computer.');
     emptyTimer = setTimeout(() => {
-      $('#emptyText').textContent = 'This is taking longer than usual. Try ⟳ Reload. If it keeps happening, something on the network may be blocking the video, and the sharer can try "Through server" mode.';
+      $('#emptyText').textContent = 'This is taking longer than usual. Try Reload (R). If it keeps happening, something on the network may be blocking the video, and the sharer can try "Through server" mode.';
       log('still no video after 15s');
     }, 15000);
   }
 
   /* ============================================================= members */
 
+  const initials = (n) => (String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => [...w][0] || '').join('') || '?').toUpperCase();
   function renderMembers() {
     const box = $('#members');
     box.innerHTML = '';
@@ -159,8 +165,11 @@
       const chip = document.createElement('span');
       const me = m.id === state.me?.id;
       chip.className = `chip${me ? ' me' : ''}`;
-      chip.title = me ? 'You: click to change your name or cursor colour' : m.name;
-      chip.innerHTML = `<span class="dot" style="background:${m.color}"></span><span class="n">${SD.escape(m.name)}</span>${state.presenter?.id === m.id ? '<span title="Sharing">🖥</span>' : ''}${me ? '<span class="tag">you</span>' : ''}`;
+      const sharingNow = state.presenter?.id === m.id;
+      chip.dataset.tip = me ? `${m.name} (you). Change your name or cursor colour` : sharingNow ? `${m.name}, sharing` : m.name;
+      if (me) { chip.setAttribute('role', 'button'); chip.tabIndex = 0; chip.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProfile(); } }; }
+      chip.innerHTML = `<span class="av" style="--c:${m.color}">${SD.escape(initials(m.name))}</span>${sharingNow ? SD.icon('monitor', 'sharing') : ''}`;
+      chip.classList.toggle('presenting', sharingNow);
       if (me) chip.onclick = openProfile;
       box.appendChild(chip);
     }
@@ -207,16 +216,24 @@
     $('#presenterBanner').classList.toggle('hidden', !p);
     $('#desktopControls').classList.toggle('hidden', !(mine && SD.isDesktop));
     $('#hidePreviewBox').classList.toggle('hidden', !mine);
+    $('#viewerTools').classList.toggle('hidden', mine);
     if (p) {
       const route = p.mode === 'relay' ? 'through the server' : 'direct (P2P)';
-      $('#presenterText').textContent = mine
-        ? `You're sharing ${p.label} · ${route}${p.audio ? ' · with sound' : ''}`
-        : `${p.name} is sharing ${p.label} · ${route}${p.audio ? ' · with sound' : ''}`;
+      $('#presenterText').textContent = mine ? `You're sharing ${p.label}` : `${p.name} is sharing ${p.label}`;
+      const Route = route[0].toUpperCase() + route.slice(1);
+      $('#presenterMeta').textContent = p.audio ? `${Route}, with sound` : Route;
+      $('#presenterBanner').dataset.tip = $('#presenterMeta').textContent;
     }
     const hasAudio = !!p && !mine && p.audio;
     $('#soundBtn').disabled = !hasAudio;
-    $('#soundBtn').title = hasAudio ? 'Sound from the shared screen' : 'The sharer isn\'t sharing sound';
-    $('#soundBtn').textContent = state.sound && hasAudio ? '🔊 On' : '🔇 Off';
+    const soundOn = state.sound && hasAudio;
+    SD.setIcon($('#soundBtn'), soundOn ? 'volume-2' : 'volume-x');
+    $('#soundBtn').classList.toggle('on', soundOn);
+    $('#soundBtn').setAttribute('aria-pressed', String(soundOn));
+    $('#soundBtn').dataset.tip = !hasAudio ? 'The sharer isn\'t sharing sound' : soundOn ? 'Mute' : 'Unmute';
+    $('#volume').disabled = !soundOn;
+    document.body.classList.toggle('sharing', !!p);
+    SD.ui?.refresh();
     $('#quality').value = state.quality;
     renderMembers();
     layout();
@@ -229,9 +246,9 @@
     if (s === 'connected') {
       el.className = `status ${conn.mode === 'poll' ? 'warn' : 'ok'}`;
       el.textContent = conn.mode === 'poll' ? 'Connected (limited)' : 'Connected';
-      el.title = conn.mode === 'poll' ? 'WebSockets are blocked on this network, so a slower fallback is used. Video "through the server" won\'t work.' : '';
-    } else if (s === 'reconnecting') { el.className = 'status warn'; el.textContent = 'Reconnecting…'; }
-    else { el.className = 'status bad'; el.textContent = 'Disconnected'; }
+      el.dataset.tip = conn.mode === 'poll' ? 'WebSockets are blocked on this network, so a slower fallback is used. Video "through the server" won\'t work.' : 'Connected to the server';
+    } else if (s === 'reconnecting') { el.className = 'status warn'; el.textContent = 'Reconnecting…'; el.dataset.tip = 'Lost the server. Trying again.'; }
+    else { el.className = 'status bad'; el.textContent = 'Disconnected'; el.dataset.tip = 'Not connected to the server'; }
   });
 
   conn.on('error', (e) => {
@@ -305,7 +322,7 @@
     if (myShare && (!p || p.id !== state.me?.id) && myShare.started) stopShare(false);
     closeViewerMedia();
     if (!p) {
-      showEmpty('Nobody is sharing yet', 'Click "Share screen" to share your screen or an app. Everyone in the room can draw on it.');
+      showEmpty('Nobody is sharing yet', 'Select Share screen to share your screen or an app. Everyone in the room can draw on it.');
     } else if (p.id === state.me?.id) {
       if (myShare) beginPresenting(); else conn.send({ type: 'share-stop' }); // stale share from before a reload
     } else {
@@ -427,6 +444,12 @@
         myShare.p2p?.updateSize(d.width, d.height);
       }
     }, 2000);
+    const wholeScreen = SD.isDesktop ? String(myShare.sourceId).startsWith('screen') : SD.describeTrack(myShare.stream).surface === 'monitor';
+    const cantExclude = !SD.isDesktop || window.desktop.info?.platform === 'linux';
+    if (wholeScreen && cantExclude && !SD.store.get('hidePreview', false) && !SD.store.get('mirrorTipShown', false)) {
+      SD.store.set('mirrorTipShown', true);
+      SD.toast('Tip: you\'re sharing the screen ScreenDraw is on, so viewers may see doubled cursors and stickers. Turn on "Hide preview" or minimise ScreenDraw to avoid it.');
+    }
     log(`started sharing "${myShare.label}" ${p.mode === 'relay' ? 'through the server' : 'directly'} (${myShare.settings.res}, ${myShare.settings.fps} fps, ${myShare.settings.optimize})`);
     updateUI();
   }
@@ -436,9 +459,13 @@
     if (!myShare) return;
     const hide = !!SD.store.get('hidePreview', false);
     $('#hidePreview').checked = hide;
+    // Hiding the preview also hides the drawings, stickers and cursors drawn
+    // over it, so nothing of ScreenDraw's own view can end up in the capture.
+    boardCanvas.classList.toggle('hidden', hide);
+    stickerLayer.classList.toggle('hidden', hide);
     if (hide) {
       video.srcObject = null;
-      showEmpty('Your preview is hidden', 'You\'re still sharing, and viewers see your screen as normal. Untick "Hide my preview" to see it here again.');
+      showEmpty('Your preview is hidden', 'You\'re still sharing, and viewers see your screen and everyone\'s drawings as normal. Turn off "Hide preview" to see it here again.');
     } else {
       video.srcObject = myShare.stream;
       video.play().catch(() => {});
@@ -451,6 +478,8 @@
     if (!myShare) return;
     const s = myShare;
     myShare = null;
+    boardCanvas.classList.remove('hidden');
+    stickerLayer.classList.remove('hidden');
     clearInterval(s.sizeTimer);
     s.p2p?.stop(); s.relay?.stop();
     s.stream.nativeAudio?.stop();
@@ -573,7 +602,7 @@
       const byName = new Map(list.apps.map((a) => [a.name.toLowerCase(), { key: a.name, label: a.name, tag: a.playing ? 'playing' : 'quiet', on: a.playing }]));
       for (const n of mode === 'apps' ? soundSaved.apps : soundSaved.except) if (!byName.has(n.toLowerCase())) byName.set(n.toLowerCase(), { key: n, label: n, tag: 'not running' });
       items = [...byName.values()].map((i) => ({ ...i, checked: saved.includes(i.key.toLowerCase()) }));
-      if (!items.length) box.innerHTML = '<p class="muted small" style="margin:6px">No apps are using sound right now. Start playing something, then press ↻.</p>';
+      if (!items.length) box.innerHTML = '<p class="muted small" style="margin:6px">No apps are using sound right now. Start playing something, then select Refresh.</p>';
     } else if (mode === 'devices') {
       items = list.devices.map((d) => ({ key: d.id, label: d.name, tag: d.default ? 'default' : '', checked: soundSaved.devices.includes(d.id) }));
     }
@@ -748,7 +777,12 @@
     try { await navigator.clipboard.writeText(link); SD.toast(`Invite link copied: ${link}`); }
     catch { prompt('Invite link:', link); }
   };
-  const toggleFs = () => (document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen());
+  const toggleFs = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+  document.addEventListener('fullscreenchange', () => {
+    const fs = !!document.fullscreenElement;
+    SD.setIcon($('#fullscreenBtn'), fs ? 'minimize' : 'maximize');
+    $('#fullscreenBtn').dataset.tip = fs ? 'Exit fullscreen (F)' : 'Fullscreen (F)';
+  });
   $('#fullscreenBtn').onclick = toggleFs;
   $('#leaveBtn').onclick = () => { stopShare(true); conn.close(); location.href = 'index.html'; };
   window.addEventListener('pagehide', () => { stopShare(true); conn.close(); });

@@ -11,7 +11,8 @@
   const fit = () => SD.fitCanvas(canvas, 0, 0, window.innerWidth, window.innerHeight);
   window.addEventListener('resize', () => { fit(); board.dirty = true; });
   fit();
-  SD.startRendering(canvas, board, () => ({ hideCursor: me }));
+  const stickerLayer = $('#stickers');
+  SD.startRendering(canvas, board, () => ({ hideCursor: me, stickerLayer }));
 
   window.desktop.onBoard((msg) => {
     if (msg.type === 'load') board.load(msg.board);
@@ -43,6 +44,7 @@
   function render() {
     swatches.forEach((b, i) => b.classList.toggle('active', SD.PALETTE[i] === pen.color));
     $('#fade').classList.toggle('on', pen.fade);
+    document.body.style.setProperty('--pen', pen.color);
   }
   $('#fade').onclick = () => { pen.fade = !pen.fade; render(); save(); };
   const undo = () => { const m = { type: 'undo', author: me }; board.apply(m); send(m); };

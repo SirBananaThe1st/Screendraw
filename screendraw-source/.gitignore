@@ -1,0 +1,11 @@
+# Your server settings (may contain a password, TURN credentials or your address)
+.env
+
+# Downloaded runtimes and build output
+runtime/
+dist/
+.build-cache/
+node_modules/
+
+# Logs
+*.log

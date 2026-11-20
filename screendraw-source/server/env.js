@@ -76,6 +76,8 @@ function load() {
     allowRelay: bool('ALLOW_RELAY', true),
     defaultMode: mode === 'relay' ? 'relay' : 'p2p',
     maxStickerKB: num('MAX_STICKER_KB', 400, 16, 4096),
+    maxGifKB: num('MAX_GIF_KB', 2048, 16, 16384),
+    maxRoomStickersMB: num('MAX_ROOM_STICKERS_MB', 24, 1, 1024),
     iceServers,
   };
 }

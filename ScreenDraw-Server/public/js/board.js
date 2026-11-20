@@ -94,15 +94,45 @@
       return img;
     }
 
+    // Stickers are real <img> elements in a layer under the drawing canvas, so
+    // browsers animate GIFs natively. Positions are percentages of the layer,
+    // which always covers exactly the same area as the canvas.
+    syncStickerLayer(layer) {
+      const els = layer._els || (layer._els = new Map());
+      for (const [id, el] of els) if (!this.stickers.has(id)) { el.remove(); els.delete(id); }
+      let prev = null;
+      for (const st of this.stickers.values()) {
+        let el = els.get(st.id);
+        if (!el) {
+          el = document.createElement('img');
+          el.alt = ''; el.draggable = false; el.decoding = 'async';
+          el.src = st.src;
+          els.set(st.id, el);
+        }
+        const pos = `${st.x * 100}%|${st.y * 100}%|${st.w * 100}%|${st.h * 100}%`;
+        if (el._pos !== pos) {
+          el._pos = pos;
+          const [l, t, w, h] = pos.split('|');
+          Object.assign(el.style, { left: l, top: t, width: w, height: h });
+        }
+        // keep stacking order = order added
+        if ((prev ? prev.nextSibling : layer.firstChild) !== el) layer.insertBefore(el, prev ? prev.nextSibling : layer.firstChild);
+        prev = el;
+      }
+    }
+
     // Draws everything. Returns true while something is animating.
-    render(ctx, w, h, { selected = null, hideCursor = null, editable = () => false } = {}) {
+    render(ctx, w, h, { selected = null, hideCursor = null, editable = () => false, stickerLayer = null } = {}) {
       const now = performance.now();
       let animating = false;
       ctx.clearRect(0, 0, w, h);
+      if (stickerLayer) this.syncStickerLayer(stickerLayer);
 
       for (const st of this.stickers.values()) {
-        const img = this.image(st.src);
-        if (img.complete && img.naturalWidth) ctx.drawImage(img, st.x * w, st.y * h, st.w * w, st.h * h);
+        if (!stickerLayer) { // fallback: draw on the canvas (no GIF animation)
+          const img = this.image(st.src);
+          if (img.complete && img.naturalWidth) ctx.drawImage(img, st.x * w, st.y * h, st.w * w, st.h * h);
+        }
         if (selected === st.id) {
           ctx.save();
           ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
@@ -170,10 +200,10 @@
     ctx.moveTo(0, 0); ctx.lineTo(0, 17); ctx.lineTo(4.5, 13); ctx.lineTo(8, 20.5); ctx.lineTo(10.8, 19.3); ctx.lineTo(7.4, 12); ctx.lineTo(13, 12); ctx.closePath();
     ctx.fillStyle = color; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
-    ctx.font = '600 12px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.font = '600 12px Plex, system-ui, -apple-system, Segoe UI, sans-serif';
     const tw = ctx.measureText(name).width;
     ctx.fillStyle = color;
-    roundRect(ctx, 14, 16, tw + 12, 20, 6); ctx.fill();
+    roundRect(ctx, 14, 16, tw + 12, 20, 2); ctx.fill();
     ctx.fillStyle = luminance(color) > 0.6 ? '#000' : '#fff';
     ctx.fillText(name, 20, 30);
     ctx.restore();

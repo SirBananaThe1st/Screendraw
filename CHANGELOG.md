@@ -1,5 +1,50 @@
 # Changelog
 
+Version numbers follow the GitHub releases. The 0.2.x entries below were development builds leading up to V1.0.0.
+
+## 1.2.0 — 2026-11-19
+
+### Changed
+- **New interface.** Graphite controls over a black stage, the IBM Plex Sans typeface, and square-edged controls instead of rounded boxes.
+- **Full-screen sharing.** The shared screen fills the window. During a share the top bar and the new tool rail on the left fold away after two seconds; move the pointer to the top or left edge, select the controls button in the bottom-right corner or press **H** to bring them back. A pin in the top bar keeps them visible.
+- **All emoji replaced with line icons** (Lucide) in the room, dialogs, the update bar and the draw-on-screen toolbar.
+- **Tool rail:** colour and size moved into small pop-outs; the active tool is marked in your pen colour.
+- **People** show as avatars with initials; the person sharing has a red ring, and you have a white one (select it to change your name or cursor colour).
+- Sound, volume and quality controls only show for viewers. The connection indicator is a dot unless something is wrong.
+- Toasts appear at the bottom centre, and the update bar at the top.
+- New app and window icon.
+
+### Fixed
+- Icon buttons could miss a click when their icon changed under the pointer.
+
+## 1.1.0 — 2026-11-19
+
+### Added
+- **Update checks** against the GitHub releases (`SirBananaThe1st/Screendraw`), shortly after start and every 6 hours, with a "Check for updates" link on the join screen.
+  - **Single-file `ScreenDraw.exe` and Linux AppImage:** *Update* downloads the new file, checks it against GitHub's SHA-256, swaps it in and restarts. The previous exe is kept as `ScreenDraw.exe.old` until the next start.
+  - **Folder version:** *Download* opens the release page.
+  - *Skip this version* hides a release until a newer one comes out.
+- The server window mentions when a newer release is available.
+
+### Security / privacy
+- The server's public `/info` no longer reveals your home-network IP addresses or port-forwarding details. They still show in your server window.
+- Added `.gitignore` for `.env`, logs, downloaded runtimes and build output.
+- Example addresses in the README and on the join screen use reserved documentation addresses.
+
+## 0.2.5 — 2026-11-19
+
+### Added
+- **Animated GIF stickers.** GIFs added by file picker or drag-and-drop stay animated for everyone, including on the sharer's on-screen overlay. A GIF over the size limit is added as a still image, with a message saying so.
+- New `.env` settings: `MAX_GIF_KB` (largest GIF, default 2048 KB) and `MAX_ROOM_STICKERS_MB` (total sticker space per room, default 24 MB, so joining a room stays quick).
+
+### Fixed
+- **Ghost trails and doubled cursors/stickers** when sharing the whole screen. ScreenDraw's own window (your preview with everyone's cursors and stickers) was being captured and sent back to viewers. While you share, the app now keeps its own window out of the capture, as it already did for the overlay (Windows 10 2004+ and macOS).
+- **Hide my preview** now also hides the drawings, stickers and cursors in your own view.
+- On Linux, and when sharing the whole screen from a browser, where ScreenDraw can't hide itself from the capture, a one-time tip suggests "Hide my preview" or minimising ScreenDraw.
+
+### Changed
+- Stickers are now shown as images under the drawing layer instead of being painted onto it, so ink still draws on top of them.
+
 ## 0.2.4 — 2026-11-15
 
 ### Added
