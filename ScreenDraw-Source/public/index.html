@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src * ws: wss: http: https:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; font-src 'self'" />
+  <title>ScreenDraw</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="join">
+    <!-- Desktop app, first run: which server? -->
+    <form class="hidden" id="serverCard">
+      <h1 class="wordmark">ScreenDraw<svg class="ink" viewBox="0 0 300 22" preserveAspectRatio="none" aria-hidden="true"><path d="M3 14 C 60 6, 120 4, 180 9 S 270 16, 297 7" /></svg></h1>
+      <p class="lead">Enter the address of the ScreenDraw server you want to use. Whoever runs the server can tell you; it's shown in their server window.</p>
+      <label class="field" for="serverInput">Server address</label>
+      <input id="serverInput" type="text" placeholder="203.0.113.7:8080 or myname.ddns.net:8080" autocomplete="off" required />
+      <div class="error" id="serverError"></div>
+      <div class="actions"><button class="btn primary" type="submit" id="serverConnect">Connect</button></div>
+      <p class="muted small">This computer remembers the address. You can change it later.</p>
+    </form>
+
+    <!-- Name + room -->
+    <form class="hidden" id="joinCard">
+      <h1 class="wordmark">ScreenDraw<svg class="ink" viewBox="0 0 300 22" preserveAspectRatio="none" aria-hidden="true"><path d="M3 14 C 60 6, 120 4, 180 9 S 270 16, 297 7" /></svg></h1>
+      <p class="lead">Share your screen and draw on it together.</p>
+
+      <div class="serverline hidden" id="serverLine">
+        <span>Server <b id="serverName"></b></span>
+        <button type="button" class="btn ghost" id="forgetServer">Change server</button>
+      </div>
+
+      <label class="field" for="name">Your name</label>
+      <input id="name" type="text" maxlength="24" placeholder="Shown next to your cursor" autocomplete="nickname" required />
+
+      <label class="field" for="room">Room code</label>
+      <div class="row">
+        <input id="room" class="grow" type="text" maxlength="32" placeholder="k7m2qp" autocomplete="off" required />
+        <button type="button" class="btn" id="newRoom" title="Make a new random room code">New room</button>
+      </div>
+
+      <div id="passwordBox" class="hidden">
+        <label class="field" for="password">Server password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+      </div>
+
+      <div class="error" id="joinError"></div>
+      <div class="actions"><button class="btn primary" type="submit">Join room</button></div>
+    </form>
+  </main>
+  <script src="js/core.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/join.js"></script>
+  <script src="js/update.js"></script>
+</body>
+</html>

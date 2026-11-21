@@ -1,0 +1,15 @@
+{
+  "name": "screendraw",
+  "productName": "ScreenDraw",
+  "version": "1.4.0",
+  "description": "Share your screen and draw on it together.",
+  "main": "app/main.js",
+  "license": "MIT",
+  "scripts": {
+    "server": "node server/server.js",
+    "app": "electron ."
+  },
+  "screendraw": {
+    "updateRepo": "SirBananaThe1st/Screendraw"
+  }
+}

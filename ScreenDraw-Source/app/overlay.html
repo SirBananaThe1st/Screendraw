@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" />
+  <title>ScreenDraw overlay</title>
+  <style>
+    @font-face { font-family: "Plex"; src: url("../public/fonts/IBMPlexSans-Medium.woff2") format("woff2"); font-weight: 500; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font: 500 13px "Plex", system-ui, -apple-system, "Segoe UI", sans-serif; --pen: #fff; }
+    canvas { position: fixed; left: 0; top: 0; }
+    #stickers, #stickersTop { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    #stickers img, #stickersTop img { position: absolute; pointer-events: none; user-select: none; }
+    body.draw canvas { cursor: crosshair; }
+    body.draw::after { content: ""; position: fixed; inset: 0; box-shadow: inset 0 0 0 2px var(--pen); pointer-events: none; }
+    #bar {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%); display: none; gap: 2px; align-items: center; height: 44px; padding: 0 4px 0 14px;
+      background: #1c1d20; color: #ecedee; border: 1px solid #3b3e45; border-top: 0; border-radius: 0 0 3px 3px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.45); z-index: 2; user-select: none;
+    }
+    body.draw #bar { display: flex; }
+    #bar .label { display: flex; align-items: center; gap: 8px; margin-right: 10px; }
+    #bar .label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #ff453a; }
+    #swatches { display: flex; gap: 6px; padding: 0 10px; border-left: 1px solid #2d2f34; border-right: 1px solid #2d2f34; height: 24px; align-items: center; }
+    #bar .sw { width: 18px; height: 18px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+    #bar .sw.active { box-shadow: 0 0 0 2px #1c1d20, 0 0 0 3.5px #ecedee; }
+    #bar .ib { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; background: none; border: 0; border-radius: 3px; color: #8e939b; cursor: pointer; }
+    #bar .ib:hover { background: #24262a; color: #ecedee; }
+    #bar .ib.on { color: var(--pen); }
+    #bar .icon { width: 18px; height: 18px; display: block; pointer-events: none; }
+    #bar .done { height: 32px; margin-left: 6px; padding: 0 14px; background: #ecedee; color: #111214; border: 0; border-radius: 3px; font: inherit; cursor: pointer; }
+    #bar .done:hover { background: #fff; }
+  </style>
+</head>
+<body>
+  <div id="stickers"></div>
+  <canvas id="canvas"></canvas>
+  <div id="stickersTop"></div>
+  <div id="bar">
+    <span class="label">Drawing on your screen</span>
+    <span id="swatches"></span>
+    <button class="ib" id="fade" title="Vanishing ink"><i data-icon="sparkles"></i></button>
+    <button class="ib" id="undo" title="Undo (Ctrl+Z)"><i data-icon="undo-2"></i></button>
+    <button class="ib" id="clear" title="Clear everyone's drawings"><i data-icon="brush-cleaning"></i></button>
+    <button class="done" id="done" title="Back to normal (Esc or Ctrl+Shift+D)">Done</button>
+  </div>
+  <script src="../public/js/core.js"></script>
+  <script src="../public/js/icons.js"></script>
+  <script src="../public/js/board.js"></script>
+  <script src="../public/js/input.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>
