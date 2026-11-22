@@ -8,8 +8,8 @@
     @font-face { font-family: "Plex"; src: url("../public/fonts/IBMPlexSans-Medium.woff2") format("woff2"); font-weight: 500; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font: 500 13px "Plex", system-ui, -apple-system, "Segoe UI", sans-serif; --pen: #fff; }
     canvas { position: fixed; left: 0; top: 0; }
-    #stickers { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
-    #stickers img { position: absolute; pointer-events: none; user-select: none; }
+    #stickers, #stickersTop { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    #stickers img, #stickersTop img { position: absolute; pointer-events: none; user-select: none; }
     body.draw canvas { cursor: crosshair; }
     body.draw::after { content: ""; position: fixed; inset: 0; box-shadow: inset 0 0 0 2px var(--pen); pointer-events: none; }
     #bar {
@@ -34,6 +34,7 @@
 <body>
   <div id="stickers"></div>
   <canvas id="canvas"></canvas>
+  <div id="stickersTop"></div>
   <div id="bar">
     <span class="label">Drawing on your screen</span>
     <span id="swatches"></span>

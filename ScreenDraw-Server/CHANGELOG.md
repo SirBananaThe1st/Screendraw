@@ -2,6 +2,38 @@
 
 Version numbers follow the GitHub releases. The 0.2.x entries below were development builds leading up to V1.0.0.
 
+## 1.4.0 — 2026-11-20
+
+### Added
+- **Clear one person's drawings.** The person sharing can clear the drawings and stickers of one person instead of everyone's:
+  - The **Clear** button at the bottom of the tool rail now lists everyone who has something on the screen, with how many drawings and stickers each has. Pointing at a name fades everyone else's, so you can see what will go. **Everyone's drawings and stickers** is still at the bottom.
+  - Or click someone's avatar in the top bar.
+  - Works for people who have already left the room too; they're marked "(left)".
+
+### Fixed
+- The red ring on the sharer's avatar now updates as soon as someone starts or stops sharing.
+
+## 1.3.1 — 2026-11-20
+
+### Fixed
+- Opening ScreenDraw a second time now brings the existing window forward instead of starting another full copy of the app (and another set of background processes).
+
+## 1.3.0 — 2026-11-20
+
+### Added
+- **Sticker layers.** Select a sticker with the Move tool, then use the new Arrange button in the tool rail or right-click it:
+  - **Bring to front**, **Bring forward**, **Send backward**, **Send to back** (also Ctrl+Shift+], Ctrl+], Ctrl+[ and Ctrl+Shift+[).
+  - **In front of drawings:** by default stickers sit behind the pen strokes; turn this on to put a sticker over them.
+  - The order is shared with everyone in the room, including people who join later and the drawings on the sharer's real screen.
+- New stickers no longer land exactly on top of each other.
+
+### Fixed
+- **Ghost copies of stickers and cursors** when the sharer uses the Windows app: ScreenDraw now re-applies "keep out of the screen capture" to its own window and to the drawing overlay whenever they're shown, restored, moved or resized. Windows could drop that setting after a window was hidden and shown again, which put ScreenDraw's own stickers back into the shared video.
+- The selection frame around a sticker is now drawn on top, so it stays visible for stickers in front of the drawings.
+
+### Changed
+- Clearer tip when the sharer's system or browser can't keep ScreenDraw out of a whole-screen share.
+
 ## 1.2.0 — 2026-11-19
 
 ### Changed

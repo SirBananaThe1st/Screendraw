@@ -12,7 +12,8 @@
   window.addEventListener('resize', () => { fit(); board.dirty = true; });
   fit();
   const stickerLayer = $('#stickers');
-  SD.startRendering(canvas, board, () => ({ hideCursor: me, stickerLayer }));
+  const stickerTop = $('#stickersTop');
+  SD.startRendering(canvas, board, () => ({ hideCursor: me, stickerLayer, stickerTop }));
 
   window.desktop.onBoard((msg) => {
     if (msg.type === 'load') board.load(msg.board);

@@ -125,6 +125,7 @@ function createUpdater({ app, log, send }) {
         fs.renameSync(release.downloaded, file); // replacing a running AppImage is fine on Linux
       }
       log(`installed ${release.version}; restarting`);
+      app.releaseSingleInstanceLock?.(); // let the new copy start while this one closes
       spawn(file, [], { detached: true, stdio: 'ignore', cwd: path.dirname(file) }).unref();
       setTimeout(() => app.quit(), 300);
     } catch (err) {

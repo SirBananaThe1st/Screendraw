@@ -15,6 +15,7 @@
     <canvas id="relayCanvas" class="hidden"></canvas>
     <div id="stickerLayer" class="stickerlayer"></div>
     <canvas id="board"></canvas>
+    <div id="stickerTop" class="stickerlayer top"></div>
     <div class="empty" id="empty">
       <div class="emptybox">
         <h2 id="emptyTitle">Connecting…</h2>
@@ -89,12 +90,13 @@
     <button class="rb" id="fadeBtn" aria-label="Vanishing ink" data-tip="Vanishing ink (E)"><i data-icon="sparkles"></i></button>
     <div class="railrule"></div>
     <button class="rb" id="stickerBtn" aria-label="Add sticker" data-tip="Add an image or GIF"><i data-icon="sticker"></i></button>
+    <button class="rb hidden" id="arrangeBtn" aria-label="Arrange sticker" data-tip="Arrange: front, back, over or under drawings" data-pop="arrangePop"><i data-icon="layers"></i></button>
     <button class="rb hidden" id="deleteSticker" aria-label="Delete sticker" data-tip="Delete sticker (Del)"><i data-icon="trash-2"></i></button>
     <input type="file" id="stickerFile" accept="image/*" class="hidden" />
     <div class="railrule"></div>
     <button class="rb" id="undoBtn" aria-label="Undo" data-tip="Undo (Ctrl+Z)"><i data-icon="undo-2"></i></button>
     <button class="rb" id="clearMine" aria-label="Clear my drawings" data-tip="Clear my drawings"><i data-icon="eraser"></i></button>
-    <button class="rb hidden" id="clearAll" aria-label="Clear everyone's drawings" data-tip="Clear everyone's drawings"><i data-icon="brush-cleaning"></i></button>
+    <button class="rb hidden" id="clearAll" aria-label="Clear someone's drawings" data-tip="Clear someone's drawings, or everyone's" data-pop="clearPop"><i data-icon="brush-cleaning"></i></button>
   </aside>
 
   <!-- Pop-outs from the rail -->
@@ -109,6 +111,24 @@
         <option value="1500">1.5 seconds</option><option value="3000" selected>3 seconds</option><option value="6000">6 seconds</option><option value="10000">10 seconds</option>
       </select>
     </label>
+  </div>
+
+  <div class="pop menu chrome" id="arrangePop" role="menu" aria-label="Arrange sticker">
+    <button role="menuitem" data-order="front"><i data-icon="bring-to-front"></i><span>Bring to front</span><kbd>Ctrl+Shift+]</kbd></button>
+    <button role="menuitem" data-order="forward"><i data-icon="chevron-up"></i><span>Bring forward</span><kbd>Ctrl+]</kbd></button>
+    <button role="menuitem" data-order="backward"><i data-icon="chevron-down"></i><span>Send backward</span><kbd>Ctrl+[</kbd></button>
+    <button role="menuitem" data-order="back"><i data-icon="send-to-back"></i><span>Send to back</span><kbd>Ctrl+Shift+[</kbd></button>
+    <div class="menurule"></div>
+    <button role="menuitemcheckbox" id="aboveDrawings" aria-checked="false"><i data-icon="pen-line"></i><span>In front of drawings</span><i data-icon="check" class="tick"></i></button>
+    <div class="menurule"></div>
+    <button role="menuitem" data-order="delete"><i data-icon="trash-2"></i><span>Delete</span><kbd>Del</kbd></button>
+  </div>
+
+  <div class="pop menu people chrome" id="clearPop" role="menu" aria-label="Clear drawings">
+    <div class="menuhead">Clear drawings</div>
+    <div id="clearList"></div>
+    <div class="menurule"></div>
+    <button role="menuitem" id="clearEveryone"><i data-icon="brush-cleaning"></i><span>Everyone's drawings and stickers</span></button>
   </div>
 
   <button class="handle" id="uiToggle" aria-label="Show controls" data-tip="Show controls (H)"><i data-icon="sliders-horizontal"></i></button>

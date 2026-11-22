@@ -96,7 +96,19 @@ class Room {
   clearBoard() { this.strokes.clear(); this.stickers.clear(); }
 
   boardSnapshot() {
-    return { strokes: [...this.strokes.values()].map(strokeOut), stickers: [...this.stickers.values()] };
+    // Names of everyone with something on the board, so people who have
+    // left can still be told apart (e.g. when the sharer clears by person).
+    const names = {};
+    for (const x of [...this.strokes.values(), ...this.stickers.values()]) {
+      const n = this.names?.get(x.author);
+      if (n && !names[x.author]) names[x.author] = n;
+    }
+    return { strokes: [...this.strokes.values()].map(strokeOut), stickers: [...this.stickers.values()], names };
+  }
+  rememberName(member) {
+    if (!this.names) this.names = new Map();
+    this.names.set(member.id, { name: member.name, color: member.color });
+    if (this.names.size > 500) this.names.delete(this.names.keys().next().value);
   }
 
   // Which relay layers (0 = full quality, 1 = low) someone is watching.
@@ -149,6 +161,7 @@ function join(member, hello) {
   member.name = cleanName(hello.name);
   member.color = COLOR_RE.test(hello.color || '') ? hello.color.toLowerCase() : pickColor(room);
   room.members.set(member.id, member);
+  room.rememberName(member);
 
   member.send({
     type: 'welcome',
@@ -347,10 +360,14 @@ function handleBoard(room, m, msg) {
       return;
     }
     case 'clear': {
-      const all = msg.all && room.presenter?.id === m.id;
+      // Everyone can clear their own; the person sharing can also clear one
+      // other person's (target), including someone who has already left, or all.
+      const isPres = room.presenter?.id === m.id;
+      const all = msg.all && isPres;
+      const who = isPres && typeof msg.target === 'string' && msg.target.length <= 64 ? msg.target : m.id;
       const ids = [];
-      for (const [id, s] of room.strokes) if (all || s.author === m.id) { room.strokes.delete(id); ids.push(id); }
-      for (const [id, s] of room.stickers) if (all || s.author === m.id) { room.stickers.delete(id); ids.push(id); }
+      for (const [id, s] of room.strokes) if (all || s.author === who) { room.strokes.delete(id); ids.push(id); }
+      for (const [id, s] of room.stickers) if (all || s.author === who) { room.stickers.delete(id); ids.push(id); }
       if (ids.length) room.broadcast({ type: 'remove', ids });
       return;
     }
@@ -370,7 +387,9 @@ function handleBoard(room, m, msg) {
         return;
       }
       if (![msg.x, msg.y, msg.w, msg.h].every(num)) return;
-      const st = { id: msg.id, author: m.id, src: msg.src, x: clamp01(msg.x), y: clamp01(msg.y), w: Math.min(1, Math.max(0.01, msg.w)), h: Math.min(1, Math.max(0.01, msg.h)) };
+      let top = -1;
+      for (const o of room.stickers.values()) if (!o.above) top = Math.max(top, o.z);
+      const st = { id: msg.id, author: m.id, src: msg.src, x: clamp01(msg.x), y: clamp01(msg.y), w: Math.min(1, Math.max(0.01, msg.w)), h: Math.min(1, Math.max(0.01, msg.h)), z: top + 1, above: false };
       room.stickers.set(st.id, st);
       room.broadcast({ type: 'sticker-add', ...st }, m);
       return;
@@ -380,6 +399,27 @@ function handleBoard(room, m, msg) {
       if (!st || !canEdit(room, m, st.author) || ![msg.x, msg.y, msg.w, msg.h].every(num)) return;
       Object.assign(st, { x: Math.min(1, Math.max(-0.5, msg.x)), y: Math.min(1, Math.max(-0.5, msg.y)), w: Math.min(2, Math.max(0.01, msg.w)), h: Math.min(2, Math.max(0.01, msg.h)) });
       room.broadcast({ type: 'sticker-update', id: st.id, x: st.x, y: st.y, w: st.w, h: st.h }, m);
+      return;
+    }
+    case 'sticker-order': {
+      // Stacking: stickers sit either behind the drawings (default) or in front
+      // of them; within each group, z orders them back (0) to front.
+      const st = room.stickers.get(msg.id);
+      if (!st || !canEdit(room, m, st.author)) return;
+      if (!['front', 'back', 'forward', 'backward', 'above', 'below'].includes(msg.to)) return;
+      if (msg.to === 'above' || msg.to === 'below') {
+        const above = msg.to === 'above';
+        if (st.above === above) return;
+        st.above = above;
+        st.z = Infinity; // lands on top of its new group
+      }
+      const group = [...room.stickers.values()].filter((o) => !!o.above === !!st.above).sort((a, b) => a.z - b.z);
+      const i = group.indexOf(st);
+      group.splice(i, 1);
+      const at = { front: group.length, back: 0, forward: Math.min(group.length, i + 1), backward: Math.max(0, i - 1) }[msg.to] ?? group.length;
+      group.splice(at, 0, st);
+      group.forEach((o, n) => { o.z = n; });
+      room.broadcast({ type: 'sticker-order', items: [...room.stickers.values()].map((o) => [o.id, o.z, !!o.above]) });
       return;
     }
     case 'sticker-remove': {
@@ -409,6 +449,7 @@ function handleMessage(m, msg) {
       if (typeof msg.name === 'string') m.name = cleanName(msg.name);
       if (COLOR_RE.test(msg.color || '')) m.color = msg.color.toLowerCase();
       if (isPresenter) room.presenter.name = m.name;
+      room.rememberName(m);
       room.broadcast({ type: 'member-updated', member: m.publicInfo });
       return;
     }
