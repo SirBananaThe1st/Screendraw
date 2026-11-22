@@ -81,7 +81,9 @@ Your `.env` stays on your PC. Friends never see it; they only need the address a
   - **Size and ink:** pen size, and how long vanishing ink lasts (1.5, 3, 6 or 10 seconds).
   - **Vanishing ink:** strokes fade on their own.
   - **Sticker:** pick an image or animated GIF, paste one with Ctrl+V, or drag it onto the screen. GIFs stay animated if they're within the size limit (2 MB by default). Pasting usually turns a GIF into a still image, so pick or drag GIFs instead. Use **Move** to drag it, the corner handle to resize, and **Delete** to remove it.
-  - **Undo**, **Clear my drawings**, and **Clear everyone's drawings** (sharer only).
+  - **Arrange** (appears in the rail when a sticker is selected, or right-click a sticker): bring to front, bring forward, send backward, send to back, and **In front of drawings** to put the sticker over the pen strokes instead of under them. Shortcuts: `Ctrl+Shift+]`, `Ctrl+]`, `Ctrl+[`, `Ctrl+Shift+[`.
+  - **Undo** and **Clear my drawings**.
+  - **Clear drawings** (sharer only): pick a person to clear just their drawings and stickers (pointing at a name fades everyone else's so you can see what will go), or clear everyone's. You can also click someone's avatar in the top bar. People who have left are listed too.
 - **Shortcuts:** `1` to `0` colours, `[` `]` size, `P` pen, `V` move, `E` vanishing ink, `Ctrl+Z` undo, `F` fullscreen, `R` reload video, `H` show or hide the controls.
 - **Cursors:** everyone's pointer shows on the shared screen with their name. Select your own avatar at the top to change your name or cursor colour. The person sharing has a red ring.
 - **Sound and volume:** turn on the sharer's sound (browsers need a click first).
@@ -93,7 +95,7 @@ Your `.env` stays on your PC. Friends never see it; they only need the address a
   - **Draw on screen** (or **Ctrl+Shift+D**) lets you draw directly; press **Esc** or **Done** to go back to click-through.
   - **Overlay** hides or shows the layer.
   - **Hide preview** stops showing your own share (and the drawings over it) inside ScreenDraw to save CPU/GPU. Viewers aren't affected. (It works in browsers too.)
-  - While you share, the ScreenDraw window is kept out of the capture (Windows 10 2004+ and macOS), so viewers don't see doubled cursors or trails. On Linux, or when sharing from a browser, minimise ScreenDraw or tick **Hide my preview** when sharing the whole screen.
+  - While you share, the ScreenDraw window and the drawing overlay are kept out of the capture (Windows 10 version 2004 or later, and macOS), so viewers don't see doubled cursors, stickers or trails. Linux and browsers can't do this. There, when you share the whole screen ScreenDraw is on, turn off **Overlay** and turn on **Hide preview**, or share a single app or another monitor instead.
 
 ### Direct (P2P) or through the server?
 

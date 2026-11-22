@@ -71,7 +71,8 @@
   const canEdit = (st) => st.author === state.me?.id || isPresenter();
 
   const stickerLayer = $('#stickerLayer');
-  SD.startRendering(boardCanvas, board, () => ({ selected: input?.selected, hideCursor: state.me?.id, editable: canEdit, stickerLayer }));
+  const stickerTop = $('#stickerTop');
+  SD.startRendering(boardCanvas, board, () => ({ selected: input?.selected, hideCursor: state.me?.id, editable: canEdit, stickerLayer, stickerTop }));
   const input = SD.attachInput(boardCanvas, {
     board,
     myId: () => state.me?.id || 'nobody',
@@ -81,7 +82,14 @@
     fade: () => (state.fade ? state.fadeMs : 0),
     send: (msg) => { conn.send(msg); toOverlay(msg); },
     canEdit,
-    onSelect: (id) => $('#deleteSticker').classList.toggle('hidden', !id || !canEdit(board.stickers.get(id) || {})),
+    onSelect: (id) => {
+      const can = !!id && canEdit(board.stickers.get(id) || {});
+      $('#deleteSticker').classList.toggle('hidden', !can);
+      $('#arrangeBtn').classList.toggle('hidden', !can);
+      if (!can) SD.ui?.closePops();
+      syncArrange();
+    },
+    onMenu: (id, x, y) => { syncArrange(); SD.ui?.openAt('arrangePop', x, y); },
     onCursor: (x, y) => conn.send({ type: 'cursor', x, y }),
     enabled: () => !!state.presenter && !!state.me,
   });
@@ -89,8 +97,76 @@
   const localBoard = (msg) => { board.apply(msg); conn.send(msg); toOverlay(msg); };
   $('#undoBtn').onclick = () => localBoard({ type: 'undo', author: state.me?.id });
   $('#clearMine').onclick = () => localBoard({ type: 'clear', author: state.me?.id });
-  $('#clearAll').onclick = () => { if (isPresenter()) localBoard({ type: 'clear', all: true, author: state.me?.id }); };
+  // The person sharing can clear one person's drawings and stickers (even
+  // someone who has left), or everyone's. Hovering a person fades the rest.
+  const knownNames = new Map(); // memberId -> { name, color }, kept after they leave
+  const rememberNames = (snap) => { for (const [id, n] of Object.entries(snap?.names || {})) if (!knownNames.has(id)) knownNames.set(id, n); };
+  function renderClearList() {
+    const list = $('#clearList');
+    const authors = board.authors().sort((a, b) => {
+      const ha = state.members.has(a.id), hb = state.members.has(b.id);
+      return (hb - ha) || (knownNames.get(a.id)?.name || '').localeCompare(knownNames.get(b.id)?.name || '');
+    });
+    list.innerHTML = '';
+    if (!authors.length) {
+      list.innerHTML = '<p class="menuempty">Nothing has been drawn yet.</p>';
+      $('#clearEveryone').disabled = true;
+      return;
+    }
+    $('#clearEveryone').disabled = false;
+    for (const a of authors) {
+      const who = knownNames.get(a.id) || { name: 'Someone', color: '#8e939b' };
+      const here = state.members.has(a.id);
+      const me = a.id === state.me?.id;
+      const parts = [];
+      if (a.strokes) parts.push(`${a.strokes} ${a.strokes === 1 ? 'drawing' : 'drawings'}`);
+      if (a.stickers) parts.push(`${a.stickers} ${a.stickers === 1 ? 'sticker' : 'stickers'}`);
+      const b = document.createElement('button');
+      b.setAttribute('role', 'menuitem');
+      b.dataset.author = a.id;
+      b.innerHTML = `<span class="av" style="--c:${SD.escape(who.color)}">${SD.escape(initials(who.name))}</span>`
+        + `<span class="who"><span class="nm">${SD.escape(who.name)}${me ? ' (you)' : here ? '' : ' (left)'}</span><span class="ct">${parts.join(', ')}</span></span>`
+        + '<span class="act">Clear</span>';
+      b.onmouseenter = b.onfocus = () => board.setHighlight(a.id);
+      b.onmouseleave = b.onblur = () => board.setHighlight(null);
+      b.onclick = () => {
+        board.setHighlight(null);
+        localBoard({ type: 'clear', target: a.id, author: state.me?.id });
+        SD.toast(me ? 'Cleared your drawings.' : `Cleared ${who.name}'s drawings.`);
+        renderClearList();
+        if (!board.authors().length) SD.ui?.closePops();
+      };
+      list.appendChild(b);
+    }
+  }
+  $('#clearAll').addEventListener('click', () => renderClearList());
+  $('#clearEveryone').onclick = () => {
+    if (!isPresenter()) return;
+    board.setHighlight(null);
+    localBoard({ type: 'clear', all: true, author: state.me?.id });
+    SD.toast('Cleared everyone\'s drawings.');
+    SD.ui?.closePops();
+  };
+  // Closing the pop-out (Escape, clicking elsewhere) ends the preview.
+  new MutationObserver(() => { if (!$('#clearPop').classList.contains('open')) board.setHighlight(null); })
+    .observe($('#clearPop'), { attributes: true, attributeFilter: ['class'] });
   $('#deleteSticker').onclick = () => { input.removeSelected(); };
+
+  // Sticker stacking: front/back within its group, and over or under the drawings.
+  function syncArrange() {
+    const st = input?.selected && board.stickers.get(input.selected);
+    $('#aboveDrawings').setAttribute('aria-checked', String(!!st?.above));
+  }
+  function arrange(to) {
+    if (to === 'delete') input.removeSelected(); else input.order(to);
+    SD.ui?.closePops();
+  }
+  document.querySelectorAll('#arrangePop [data-order]').forEach((b) => { b.onclick = () => arrange(b.dataset.order); });
+  $('#aboveDrawings').onclick = () => {
+    const st = board.stickers.get(input.selected);
+    if (st) input.order(st.above ? 'below' : 'above');
+    SD.ui?.closePops();
+  };
 
   /* ============================================================ stickers */
 
@@ -102,7 +178,10 @@
       if (tooBig) SD.toast(`That GIF is over the ${+((state.config?.maxGifKB || 2048) / 1024).toFixed(1)} MB limit, so it was added as a still image.`);
       const css = boardCanvas._css || { w: 16, h: 9 };
       const w = 0.22, h = (w / aspect) * (css.w / css.h);
-      const msg = { type: 'sticker-add', id: `${state.me.id}-s${SD.uid(5)}`, author: state.me.id, src, x: 0.5 - w / 2, y: 0.5 - h / 2, w, h };
+      // Cascade new stickers so one doesn't land exactly on top of another.
+      let x = 0.5 - w / 2, y = 0.5 - h / 2;
+      for (let i = 0; i < 12 && [...board.stickers.values()].some((o) => Math.abs(o.x - x) < 0.005 && Math.abs(o.y - y) < 0.005); i++) { x += 0.025; y += 0.035; }
+      const msg = { type: 'sticker-add', id: `${state.me.id}-s${SD.uid(5)}`, author: state.me.id, src, x, y, w, h };
       localBoard(msg);
       setTool('move');
     } catch (err) { SD.toast(`Couldn't add that image: ${err.message}`, 'bad'); }
@@ -129,7 +208,7 @@
     const { w, h } = mediaSize();
     const c = SD.contain(r, w, h);
     SD.fitCanvas(boardCanvas, c.x, c.y, c.w, c.h);
-    Object.assign(stickerLayer.style, { left: `${c.x}px`, top: `${c.y}px`, width: `${c.w}px`, height: `${c.h}px` });
+    for (const l of [stickerLayer, stickerTop]) Object.assign(l.style, { left: `${c.x}px`, top: `${c.y}px`, width: `${c.w}px`, height: `${c.h}px` });
     if (mediaKind === 'relay') { SD.fitCanvas(relayCanvas, c.x, c.y, c.w, c.h); viewRelay?.redraw(); }
     board.dirty = true;
   }
@@ -159,6 +238,7 @@
 
   const initials = (n) => (String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => [...w][0] || '').join('') || '?').toUpperCase();
   function renderMembers() {
+    for (const m of state.members.values()) knownNames.set(m.id, { name: m.name, color: m.color });
     const box = $('#members');
     box.innerHTML = '';
     for (const m of state.members.values()) {
@@ -171,6 +251,17 @@
       chip.innerHTML = `<span class="av" style="--c:${m.color}">${SD.escape(initials(m.name))}</span>${sharingNow ? SD.icon('monitor', 'sharing') : ''}`;
       chip.classList.toggle('presenting', sharingNow);
       if (me) chip.onclick = openProfile;
+      else if (isPresenter()) {
+        // The sharer can click someone's avatar to clear their drawings.
+        chip.classList.add('act');
+        chip.dataset.tip = `${m.name}${sharingNow ? ', sharing' : ''}. Clear their drawings`;
+        chip.onclick = () => {
+          renderClearList();
+          const r = chip.getBoundingClientRect();
+          SD.ui?.openAt('clearPop', r.left, r.bottom + 4);
+          $(`#clearList [data-author="${CSS.escape(m.id)}"]`)?.focus();
+        };
+      }
       box.appendChild(chip);
     }
     board.setMembers([...state.members.values()]);
@@ -209,6 +300,7 @@
   function updateUI() {
     const p = state.presenter;
     const mine = isPresenter();
+    renderMembers(); // the red ring and the sharer's avatar menu follow the presenter
     $('#shareBtn').classList.toggle('hidden', mine);
     $('#stopBtn').classList.toggle('hidden', !mine);
     $('#clearAll').classList.toggle('hidden', !mine);
@@ -264,6 +356,7 @@
     state.me = w.you;
     state.config = w.config;
     state.members = new Map(w.members.map((m) => [m.id, m]));
+    rememberNames(w.board);
     board.load(w.board);
     if (myShare) {
       // We reconnected while sharing: carry on if nobody else took over.
@@ -292,6 +385,7 @@
   });
 
   conn.on('presenter', ({ presenter, board: snapshot }) => {
+    rememberNames(snapshot);
     board.load(snapshot);
     toOverlay({ type: 'load', board: snapshot });
     setPresenter(presenter);
@@ -302,8 +396,8 @@
     SD.toast(`${by} started sharing, so your share was stopped.`);
   });
 
-  for (const t of ['stroke-start', 'stroke-points', 'stroke-end', 'remove', 'sticker-add', 'sticker-update', 'cursor']) {
-    conn.on(t, (msg) => { board.apply(msg); toOverlay(msg); });
+  for (const t of ['stroke-start', 'stroke-points', 'stroke-end', 'remove', 'sticker-add', 'sticker-update', 'sticker-order', 'cursor']) {
+    conn.on(t, (msg) => { board.apply(msg); toOverlay(msg); if (t === 'sticker-order') syncArrange(); });
   }
 
   conn.on('signal', (m) => { if (myShare?.p2p) myShare.p2p.onSignal(m); else viewP2P?.onSignal(m); });
@@ -448,7 +542,9 @@
     const cantExclude = !SD.isDesktop || window.desktop.info?.platform === 'linux';
     if (wholeScreen && cantExclude && !SD.store.get('hidePreview', false) && !SD.store.get('mirrorTipShown', false)) {
       SD.store.set('mirrorTipShown', true);
-      SD.toast('Tip: you\'re sharing the screen ScreenDraw is on, so viewers may see doubled cursors and stickers. Turn on "Hide preview" or minimise ScreenDraw to avoid it.');
+      SD.toast(SD.isDesktop
+        ? 'Tip: this system can\'t keep ScreenDraw out of a screen share, so viewers may see doubled cursors and stickers. Turn off Overlay and turn on Hide preview, or share a single app or another monitor.'
+        : 'Tip: you\'re sharing the screen this browser is on, so viewers may see doubled cursors and stickers. Turn on Hide preview, minimise this window, or share a single app or another monitor.');
     }
     log(`started sharing "${myShare.label}" ${p.mode === 'relay' ? 'through the server' : 'directly'} (${myShare.settings.res}, ${myShare.settings.fps} fps, ${myShare.settings.optimize})`);
     updateUI();
@@ -463,6 +559,7 @@
     // over it, so nothing of ScreenDraw's own view can end up in the capture.
     boardCanvas.classList.toggle('hidden', hide);
     stickerLayer.classList.toggle('hidden', hide);
+    stickerTop.classList.toggle('hidden', hide);
     if (hide) {
       video.srcObject = null;
       showEmpty('Your preview is hidden', 'You\'re still sharing, and viewers see your screen and everyone\'s drawings as normal. Turn off "Hide preview" to see it here again.');
@@ -480,6 +577,7 @@
     myShare = null;
     boardCanvas.classList.remove('hidden');
     stickerLayer.classList.remove('hidden');
+    stickerTop.classList.remove('hidden');
     clearInterval(s.sizeTimer);
     s.p2p?.stop(); s.relay?.stop();
     s.stream.nativeAudio?.stop();
@@ -790,6 +888,12 @@
   window.addEventListener('keydown', (e) => {
     if (e.target.matches('input[type=text], input[type=password], textarea, select') || dlg.open) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); $('#undoBtn').click(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.code === 'BracketRight' || e.code === 'BracketLeft') && input.selected) {
+      e.preventDefault();
+      const up = e.code === 'BracketRight';
+      input.order(e.shiftKey ? (up ? 'front' : 'back') : (up ? 'forward' : 'backward'));
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
     if (/^[0-9]$/.test(k)) setColor(SD.PALETTE[(Number(k) + 9) % 10]);

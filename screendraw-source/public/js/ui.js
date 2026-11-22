@@ -13,7 +13,7 @@
   let muted = false;        // just hidden on purpose: ignore hover until the pointer moves away
 
   const dialogOpen = () => !!document.querySelector('dialog[open]');
-  const popOpen = () => !!document.querySelector('.pop.open');
+  const popOpen = () => !!document.querySelector('.pop.open:not(.atpointer)');
   const sharing = () => body.classList.contains('sharing');
 
   let wasSharing = false;
@@ -64,7 +64,7 @@
   /* ------------------------------------------------------------ pop-outs */
 
   function closePops(except) {
-    document.querySelectorAll('.pop.open').forEach((p) => { if (p !== except) p.classList.remove('open'); });
+    document.querySelectorAll('.pop.open').forEach((p) => { if (p !== except) p.classList.remove('open', 'atpointer'); });
     document.querySelectorAll('[data-pop]').forEach((b) => b.classList.toggle('popped', !!except && b.dataset.pop === except.id));
   }
   document.querySelectorAll('[data-pop]').forEach((btn) => {
@@ -75,6 +75,7 @@
       closePops(opening ? pop : null);
       if (!opening) { apply(); return; }
       const r = btn.getBoundingClientRect();
+      pop.classList.remove('atpointer');
       pop.classList.add('open');
       const h = pop.offsetHeight;
       pop.style.left = `${r.right + 8}px`;
@@ -132,6 +133,18 @@
   // Native title tooltips would double up with ours.
   document.querySelectorAll('[data-tip][title]').forEach((el) => el.removeAttribute('title'));
 
-  SD.ui = { refresh: apply, closePops, debug: () => ({ pinned, forced, hot, timer: !!timer, muted }) };
+  // Open a pop-out at the pointer (right-click menus); it doesn't bring the bars back.
+  function openAt(id, x, y) {
+    const pop = document.getElementById(id);
+    closePops(null);
+    pop.classList.add('open', 'atpointer');
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = `${Math.max(8, Math.min(x + 2, innerWidth - w - 8))}px`;
+    pop.style.top = `${Math.max(8, Math.min(y + 2, innerHeight - h - 8))}px`;
+    pop.querySelector('button')?.focus({ preventScroll: true });
+    apply();
+  }
+
+  SD.ui = { refresh: apply, closePops, openAt, debug: () => ({ pinned, forced, hot, timer: !!timer, muted }) };
   apply();
 })();

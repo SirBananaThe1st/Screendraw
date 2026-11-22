@@ -62,7 +62,22 @@ const audio = createAudioSources({
 });
 
 /* -------------------------------------------------------------------- app */
+// One copy at a time: opening ScreenDraw again just brings the existing
+// window forward instead of starting a second full set of processes.
+const firstInstance = app.requestSingleInstanceLock();
+if (!firstInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWin) return;
+    if (mainWin.isMinimized()) mainWin.restore();
+    mainWin.show();
+    mainWin.focus();
+  });
+}
+
 app.whenReady().then(() => {
+  if (!firstInstance) return;
   LOG_FILE = path.join(app.getPath('userData'), 'screendraw.log');
   log(`ScreenDraw starting (Electron ${process.versions.electron}, ${process.platform} ${process.arch}); log: ${LOG_FILE}`);
 
@@ -87,12 +102,13 @@ app.whenReady().then(() => {
   mainWin = new BrowserWindow({
     width: 1280, height: 820, minWidth: 900, minHeight: 560,
     title: 'ScreenDraw',
-    backgroundColor: '#0d0f14',
+    backgroundColor: '#000000',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: PRELOAD, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
   mainWin.setMenuBarVisibility(false);
   watch(mainWin, 'app');
+  guardProtection(mainWin, () => protectMain);
   mainWin.loadFile(path.join(PUBLIC, 'index.html'));
   mainWin.on('closed', () => { mainWin = null; audio.stop(); closeOverlay(); app.quit(); });
 
@@ -165,7 +181,20 @@ function placeOverlay(rect) {
   if (!overlay) return;
   if (!rect) { overlay.hide(); return; }
   overlay.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
-  if (overlayVisible || drawMode) overlay.showInactive();
+  if (overlayVisible || drawMode) { overlay.showInactive(); reprotect(overlay, true); }
+}
+
+// Windows can drop a window's capture exclusion when it is hidden and shown
+// again (and some builds ignore it if set before the first show), which brings
+// ScreenDraw's own stickers and cursors back into the capture and shows up as
+// ghost copies for viewers. So apply it again whenever the window appears.
+let protectMain = false;
+function reprotect(win, on) {
+  if (!win || win.isDestroyed()) return;
+  try { win.setContentProtection(on); } catch { /* not supported */ }
+}
+function guardProtection(win, isOn) {
+  for (const ev of ['show', 'restore', 'focus', 'move', 'resize']) win.on(ev, () => { if (isOn()) reprotect(win, true); });
 }
 
 async function openOverlay(sourceId) {
@@ -174,7 +203,8 @@ async function openOverlay(sourceId) {
   // Otherwise a whole-screen share shows your preview (with everyone's cursors
   // and stickers) inside itself, and viewers see doubled, trailing copies.
   // Works on Windows 10 2004+ and macOS; not supported on Linux.
-  mainWin?.setContentProtection(true);
+  protectMain = true;
+  reprotect(mainWin, true);
   const isWindow = sourceId.startsWith('window');
   const initial = isWindow ? { x: 0, y: 0, width: 400, height: 300 } : displayFor(sourceId).bounds;
   overlay = new BrowserWindow({
@@ -189,6 +219,8 @@ async function openOverlay(sourceId) {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlay.setContentProtection(true); // keep the overlay out of the screen capture
+  const ov = overlay;
+  guardProtection(ov, () => overlay === ov);
   overlay.on('closed', () => { overlay = null; });
   watch(overlay, 'overlay');
   await overlay.loadFile(path.join(__dirname, 'overlay.html'));
@@ -200,12 +232,14 @@ async function openOverlay(sourceId) {
   } else {
     overlay.setBounds(initial);
     overlay.showInactive();
+    reprotect(overlay, true);
   }
   try { globalShortcut.register(DRAW_SHORTCUT, () => setDrawMode(!drawMode)); } catch { /* taken */ }
 }
 
 function closeOverlay() {
-  mainWin?.setContentProtection(false);
+  protectMain = false;
+  reprotect(mainWin, false);
   tracker?.stop(); tracker = null;
   drawMode = false;
   try { globalShortcut.unregister(DRAW_SHORTCUT); } catch { /* ignore */ }

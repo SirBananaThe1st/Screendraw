@@ -42,7 +42,7 @@
 
     function hitSticker(x, y) {
       const r = canvas.getBoundingClientRect();
-      const list = [...board.stickers.values()].reverse();
+      const list = board.ordered().reverse(); // topmost first
       for (const st of list) {
         const hx = (st.x + st.w) * r.width, hy = (st.y + st.h) * r.height;
         if (opts.canEdit(st) && Math.abs(x * r.width - hx) <= 10 && Math.abs(y * r.height - hy) <= 10) return { st, mode: 'resize' };
@@ -114,8 +114,24 @@
       if (st && opts.canEdit(st)) { local({ type: 'remove', ids: [st.id] }); opts.send({ type: 'sticker-remove', id: st.id }); setSelected(null); }
     });
 
+    // Right-click a sticker (with the move tool) to select it and open its menu.
+    canvas.addEventListener('contextmenu', (e) => {
+      if (opts.tool() !== 'move' || !opts.enabled()) return;
+      const [x, y] = norm(e);
+      const hit = hitSticker(x, y);
+      if (!hit || !opts.canEdit(hit.st)) return;
+      e.preventDefault();
+      setSelected(hit.st.id);
+      opts.onMenu?.(hit.st.id, e.clientX, e.clientY);
+    });
+
     return {
       get selected() { return selected; },
+      // Stacking: 'front' | 'back' | 'forward' | 'backward' | 'above' | 'below' (the drawings).
+      order(to) {
+        const st = board.stickers.get(selected);
+        if (st && opts.canEdit(st)) opts.send({ type: 'sticker-order', id: st.id, to });
+      },
       deselect: () => setSelected(null),
       removeSelected() {
         const st = board.stickers.get(selected);
